@@ -23,6 +23,7 @@ class TicketController extends Controller
         }
 
         $tickets = $query
+            ->with(['user', 'assignee'])
             ->when($request->search,function($query,$search){
                 $query->where(
                     'title',

@@ -131,6 +131,7 @@ const statusLabel = {
                                 <th class="px-5 py-3.5">Category</th>
                                 <th class="px-5 py-3.5">Status</th>
                                 <th class="px-5 py-3.5">Priority</th>
+                                <th class="px-5 py-3.5">Assigned To</th>
                             </tr>
                         </thead>
 
@@ -180,10 +181,18 @@ const statusLabel = {
                                         {{ ticket.priority }}
                                     </span>
                                 </td>
+                                <td class="px-5 py-4">
+                                    <span v-if="ticket.assignee" class="text-sm text-gray-700">
+                                        {{ ticket.assignee.name }}
+                                    </span>
+                                    <span v-else class="text-xs text-gray-400">
+                                        Unassigned
+                                    </span>
+                                </td>
                             </tr>
 
                             <tr v-if="tickets.data.length === 0">
-                                <td colspan="6" class="px-5 py-16 text-center">
+                                <td colspan="7" class="px-5 py-16 text-center">
                                     <Ticket class="mx-auto mb-3 h-8 w-8 text-gray-300" />
                                     <p class="text-sm font-medium text-gray-500">No tickets found</p>
                                     <p class="mt-1 text-xs text-gray-400">
