@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 use App\Http\Controllers\TicketController;
+use App\Http\Controllers\DashboardController;
 use App\Models\Ticket;
 
 use App\Http\Controllers\UserController;
@@ -13,7 +14,6 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\LoginLogController;
 use App\Http\Controllers\LogController;
 use App\Http\Controllers\ActivityLogController;
-
 
 
 Route::get('/', function () {
@@ -32,62 +32,9 @@ Route::get('/', function () {
 
 });
 
-
-
-Route::get('/dashboard', function () {
-
-
-    $query = Ticket::query();
-
-
-    if (auth()->user()->role === 'user') {
-
-        $query->where(
-            'user_id',
-            auth()->id()
-        );
-
-    }
-
-
-
-    return Inertia::render('Dashboard', [
-
-        'stats' => [
-
-            'total' => (clone $query)
-                ->count(),
-
-
-            'open' => (clone $query)
-                ->where('status', 'open')
-                ->count(),
-
-
-            'in_progress' => (clone $query)
-                ->where('status', 'in_progress')
-                ->count(),
-
-
-            'resolved' => (clone $query)
-                ->where('status', 'resolved')
-                ->count(),
-
-
-            'closed' => (clone $query)
-                ->where('status', 'closed')
-                ->count(),
-
-        ],
-
-    ]);
-
-
-})->middleware(['auth'])->name('dashboard');
-
-
-
-
+Route::get('/dashboard', [DashboardController::class, 'index'])
+    ->middleware(['auth'])
+    ->name('dashboard');
 
 Route::middleware('auth')->group(function () {
 
@@ -109,16 +56,11 @@ Route::middleware('auth')->group(function () {
         'destroy'
     ])->name('profile.destroy');
 
-
-
-
-
     /*
     |--------------------------------------------------------------------------
     | Tickets
     |--------------------------------------------------------------------------
     */
-
 
     Route::get('/tickets', [
         TicketController::class,
@@ -137,14 +79,10 @@ Route::middleware('auth')->group(function () {
         'store'
     ])->name('tickets.store');
 
-
-
     Route::get('/tickets/{ticket}', [
         TicketController::class,
         'show'
     ])->name('tickets.show');
-
-
 
     Route::post(
         '/tickets/{ticket}/comments',
@@ -154,8 +92,6 @@ Route::middleware('auth')->group(function () {
         ]
     )->name('tickets.comments.store');
 
-
-
     Route::patch(
         '/tickets/{ticket}/status',
         [
@@ -163,8 +99,6 @@ Route::middleware('auth')->group(function () {
             'updateStatus'
         ]
     )->name('tickets.status.update');
-
-
 
     Route::patch(
         '/tickets/{ticket}/assign',
@@ -174,39 +108,26 @@ Route::middleware('auth')->group(function () {
         ]
     )->name('tickets.assign');
 
-
-
-
-
-
-
     /*
     |--------------------------------------------------------------------------
     | Users
     |--------------------------------------------------------------------------
     */
 
-
     Route::get('/users', [
         UserController::class,
         'index',
     ])->name('users.index');
-
-
 
     Route::get('/users/create', [
         UserController::class,
         'create',
     ])->name('users.create');
 
-
-
     Route::post('/users', [
         UserController::class,
         'store',
     ])->name('users.store');
-
-
 
     Route::get(
         '/users/{user}/edit',
@@ -216,8 +137,6 @@ Route::middleware('auth')->group(function () {
         ]
     )->name('users.edit');
 
-
-
     Route::patch(
         '/users/{user}',
         [
@@ -225,8 +144,6 @@ Route::middleware('auth')->group(function () {
             'update'
         ]
     )->name('users.update');
-
-
 
     Route::get(
         '/users/{user}/password',
@@ -236,8 +153,6 @@ Route::middleware('auth')->group(function () {
         ]
     )->name('users.password.edit');
 
-
-
     Route::patch(
         '/users/{user}/password',
         [
@@ -245,8 +160,6 @@ Route::middleware('auth')->group(function () {
             'updatePassword'
         ]
     )->name('users.password.update');
-
-
 
     Route::delete(
         '/users/{user}',
@@ -256,19 +169,11 @@ Route::middleware('auth')->group(function () {
         ]
     )->name('users.destroy');
 
-
-
-
-
-
-
-
     /*
     |--------------------------------------------------------------------------
     | Logs
     |--------------------------------------------------------------------------
     */
-
 
     Route::get('/logs/login', [
 
@@ -278,9 +183,6 @@ Route::middleware('auth')->group(function () {
 
     ])->name('logs.login');
 
-
-
-
     Route::get('/logs', [
 
         LogController::class,
@@ -289,16 +191,11 @@ Route::middleware('auth')->group(function () {
 
     ])->name('logs.index');
 
-
-
-
-
     /*
     |--------------------------------------------------------------------------
     | Activity Logs
     |--------------------------------------------------------------------------
     */
-
 
     Route::get('/logs/activity', [
 
@@ -307,11 +204,6 @@ Route::middleware('auth')->group(function () {
         'index'
 
     ])->name('logs.activity');
-
-
-
 });
-
-
 
 require __DIR__.'/auth.php';

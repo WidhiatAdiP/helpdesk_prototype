@@ -1,7 +1,7 @@
 <script setup>
 import Toast from '@/Components/Toast.vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { ref, watch, onMounted, onUnmounted } from 'vue';
 import {
     LayoutDashboard,
     Ticket,
@@ -44,6 +44,59 @@ const executeLogout = () => {
     router.post(route('logout'));
 };
 
+// ── Fix #3 & #4: tutup dropdown + sync logsOpen saat navigasi Inertia ──
+let removeStartListener = null;
+let removeSuccessListener = null;
+
+onMounted(() => {
+    removeStartListener = router.on('start', () => {
+        showUserDropdown.value = false;
+        sidebarOpen.value = false;
+    });
+
+    // Setelah navigasi selesai, sync logsOpen dengan route aktif
+    removeSuccessListener = router.on('success', () => {
+        logsOpen.value = route().current('logs.*');
+    });
+});
+
+onUnmounted(() => {
+    removeStartListener?.();
+    removeSuccessListener?.();
+});
+
+// ── Fix #2: scroll hide/show header dengan cleanup yang benar ──
+const headerVisible = ref(true);
+let lastScrollY = 0;
+let ticking = false;
+
+const onScroll = () => {
+    if (ticking) return;
+    window.requestAnimationFrame(() => {
+        const currentScrollY = window.scrollY;
+        const scrollDiff = currentScrollY - lastScrollY;
+
+        if (currentScrollY < 60 || scrollDiff < -8) {
+            headerVisible.value = true;
+        } else if (scrollDiff > 8) {
+            headerVisible.value = false;
+            showUserDropdown.value = false;
+        }
+
+        lastScrollY = currentScrollY;
+        ticking = false;
+    });
+    ticking = true;
+};
+
+onMounted(() => {
+    window.addEventListener('scroll', onScroll, { passive: true });
+});
+
+onUnmounted(() => {
+    window.removeEventListener('scroll', onScroll);
+});
+
 const avatarColors = [
     'bg-indigo-500', 'bg-pink-500', 'bg-emerald-500',
     'bg-amber-500', 'bg-sky-500', 'bg-violet-500',
@@ -77,8 +130,10 @@ const subLinkClass = (name) => [
 <template>
     <Toast />
 
+    <!-- ── Fix #1: Layout pakai lg:flex di root, sidebar lg:static ── -->
     <div class="min-h-screen bg-gray-50 lg:flex">
-        <!-- Mobile Overlay -->
+
+        <!-- Mobile Overlay — z-30 -->
         <Transition
             enter-active-class="transition duration-200 ease-out"
             enter-from-class="opacity-0"
@@ -92,10 +147,10 @@ const subLinkClass = (name) => [
             />
         </Transition>
 
-        <!-- Sidebar -->
+        <!-- Sidebar — fixed mobile, static desktop, z-40 -->
         <aside
             :class="[
-                'fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-white border-r border-gray-100 shadow-xl transition-transform duration-300 ease-in-out lg:translate-x-0',
+                'fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-white border-r border-gray-100 shadow-xl transition-transform duration-300 ease-in-out lg:static lg:z-auto lg:translate-x-0 lg:shadow-none',
                 sidebarOpen ? 'translate-x-0' : '-translate-x-full',
             ]"
         >
@@ -197,32 +252,19 @@ const subLinkClass = (name) => [
                     </div>
                 </div>
             </nav>
-            <!-- Sidebar Footer -->
+
+            <!-- ── Fix #5: Sidebar footer — versi lebih maintainable ── -->
             <div class="border-t border-gray-100 bg-white px-5 py-4">
                 <div class="flex items-center gap-3">
-
-                    <div
-                        class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-sm font-bold text-white"
-                    >
+                    <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-sm font-bold text-white">
                         H
                     </div>
-
                     <div class="min-w-0">
-                        <p class="truncate text-sm font-semibold text-gray-800">
-                            Helpdesk
-                        </p>
-
-                        <p class="text-xs text-gray-500">
-                            Version 1.0.0
-                        </p>
-
-                        <p class="text-[11px] text-gray-400">
-                            Laravel 11 • Vue 3
-                        </p>
+                        <p class="truncate text-sm font-semibold text-gray-800">Helpdesk</p>
+                        <p class="text-xs text-gray-500">Version 1.0.0</p>
+                        <p class="text-[11px] text-gray-400">Laravel 11 · Vue 3</p>
                     </div>
-
                 </div>
-
                 <div class="mt-3 border-t border-gray-100 pt-3">
                     <p class="text-[11px] text-gray-400">
                         © {{ new Date().getFullYear() }} Widhiat
@@ -231,12 +273,15 @@ const subLinkClass = (name) => [
             </div>
         </aside>
 
-        <!-- Main -->
-        <div class="flex min-w-0 flex-1 flex-col lg:ml-64">
+        <!-- Main — tidak pakai lg:ml-64 lagi karena sidebar sudah lg:static -->
+        <div class="flex min-w-0 flex-1 flex-col">
 
-            <!-- Topbar — sticky dengan animasi hide/show -->
+            <!-- ── Fix #2: Header sticky dengan scroll hide/show + cleanup ── -->
             <header
-                class="sticky top-0 z-50 flex h-16 shrink-0 items-center justify-between border-b border-gray-100 bg-white/95 px-4 shadow-sm backdrop-blur-sm lg:px-6"
+                class="sticky top-0 z-50 flex h-16 shrink-0 items-center justify-between border-b border-gray-100 bg-white/95 px-4 backdrop-blur-sm transition-all duration-300 ease-in-out lg:px-6"
+                :class="headerVisible
+                    ? 'translate-y-0 opacity-100 shadow-sm'
+                    : '-translate-y-full opacity-0 shadow-none'"
             >
                 <button
                     class="rounded-xl p-2 text-gray-500 transition hover:bg-gray-100 lg:hidden"
@@ -277,7 +322,7 @@ const subLinkClass = (name) => [
                         />
                     </button>
 
-                    <!-- Dropdown -->
+                    <!-- ── Fix #6: Dropdown z-55 supaya di atas header z-50 ── -->
                     <Transition
                         enter-active-class="transition duration-150 ease-out"
                         enter-from-class="opacity-0 scale-95 translate-y-1"
@@ -286,9 +331,9 @@ const subLinkClass = (name) => [
                     >
                         <div
                             v-if="showUserDropdown"
-                            class="absolute right-0 top-full z-50 mt-2 w-56 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-lg ring-1 ring-black/5"
+                            class="absolute right-0 top-full mt-2 w-56 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-lg ring-1 ring-black/5"
+                            style="z-index: 55;"
                         >
-                            <!-- User info -->
                             <div class="border-b border-gray-100 px-4 py-3.5">
                                 <div class="flex items-center gap-3">
                                     <div
@@ -308,7 +353,6 @@ const subLinkClass = (name) => [
                                 </div>
                             </div>
 
-                            <!-- Menu items -->
                             <div class="p-1.5">
                                 <Link
                                     :href="route('profile.edit')"
@@ -340,16 +384,17 @@ const subLinkClass = (name) => [
         </div>
     </div>
 
-    <!-- Overlay tutup dropdown -->
+    <!-- ── Fix #6: Overlay dropdown z-45 supaya di bawah dropdown ── -->
     <Teleport to="body">
         <div
             v-if="showUserDropdown"
-            class="fixed inset-0 z-40"
+            class="fixed inset-0"
+            style="z-index: 45;"
             @click="closeUserDropdown"
         />
     </Teleport>
 
-    <!-- Logout Confirmation Modal -->
+    <!-- Modal logout z-60 supaya di atas segalanya -->
     <Teleport to="body">
         <Transition
             enter-active-class="transition duration-200 ease-out"
@@ -359,7 +404,8 @@ const subLinkClass = (name) => [
         >
             <div
                 v-if="showLogoutModal"
-                class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm"
+                class="fixed inset-0 flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm"
+                style="z-index: 60;"
                 @click.self="cancelLogout"
             >
                 <Transition
@@ -378,15 +424,10 @@ const subLinkClass = (name) => [
                                     <LogOut class="h-5 w-5 text-red-600" />
                                 </div>
                                 <div>
-                                    <h3 class="text-base font-semibold text-gray-900">
-                                        Sign Out
-                                    </h3>
-                                    <p class="text-xs text-gray-400">
-                                        You will be redirected to login page
-                                    </p>
+                                    <h3 class="text-base font-semibold text-gray-900">Sign Out</h3>
+                                    <p class="text-xs text-gray-400">You will be redirected to login page</p>
                                 </div>
                             </div>
-
                             <button
                                 class="rounded-lg p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
                                 @click="cancelLogout"
@@ -404,15 +445,10 @@ const subLinkClass = (name) => [
                                     {{ initials(user.name) }}
                                 </div>
                                 <div class="min-w-0 flex-1">
-                                    <p class="truncate text-sm font-semibold text-gray-800">
-                                        {{ user.name }}
-                                    </p>
-                                    <p class="truncate text-xs capitalize text-gray-400">
-                                        {{ user.role }}
-                                    </p>
+                                    <p class="truncate text-sm font-semibold text-gray-800">{{ user.name }}</p>
+                                    <p class="truncate text-xs capitalize text-gray-400">{{ user.role }}</p>
                                 </div>
                             </div>
-
                             <p class="mt-4 text-sm text-gray-500">
                                 Are you sure you want to sign out? Any unsaved changes will be lost.
                             </p>
@@ -425,7 +461,6 @@ const subLinkClass = (name) => [
                             >
                                 Cancel
                             </button>
-
                             <button
                                 class="inline-flex items-center gap-2 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700"
                                 @click="executeLogout"
