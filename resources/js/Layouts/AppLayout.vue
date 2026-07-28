@@ -1,7 +1,8 @@
 <script setup>
 import Toast from '@/Components/Toast.vue';
-import { Link, router, usePage } from '@inertiajs/vue3';
-import { ref, watch, onMounted, onUnmounted } from 'vue';
+import { Link, usePage } from '@inertiajs/vue3';
+import { router } from '@inertiajs/core';
+import { ref, onMounted, onUnmounted } from 'vue';
 import {
     LayoutDashboard,
     Ticket,
@@ -24,6 +25,15 @@ const sidebarOpen = ref(false);
 const logsOpen = ref(route().current('logs.*'));
 const showLogoutModal = ref(false);
 const showUserDropdown = ref(false);
+const isLoading = ref(false);
+const headerVisible = ref(true);
+
+let removeStart = null;
+let removeFinish = null;
+let loadingTimer = null;
+
+let lastScrollY = 0;
+let ticking = false;
 
 const toggleSidebar = () => { sidebarOpen.value = !sidebarOpen.value; };
 const toggleLogs = () => { logsOpen.value = !logsOpen.value; };
@@ -44,32 +54,6 @@ const executeLogout = () => {
     router.post(route('logout'));
 };
 
-// ── Fix #3 & #4: tutup dropdown + sync logsOpen saat navigasi Inertia ──
-let removeStartListener = null;
-let removeSuccessListener = null;
-
-onMounted(() => {
-    removeStartListener = router.on('start', () => {
-        showUserDropdown.value = false;
-        sidebarOpen.value = false;
-    });
-
-    // Setelah navigasi selesai, sync logsOpen dengan route aktif
-    removeSuccessListener = router.on('success', () => {
-        logsOpen.value = route().current('logs.*');
-    });
-});
-
-onUnmounted(() => {
-    removeStartListener?.();
-    removeSuccessListener?.();
-});
-
-// ── Fix #2: scroll hide/show header dengan cleanup yang benar ──
-const headerVisible = ref(true);
-let lastScrollY = 0;
-let ticking = false;
-
 const onScroll = () => {
     if (ticking) return;
     window.requestAnimationFrame(() => {
@@ -89,11 +73,37 @@ const onScroll = () => {
     ticking = true;
 };
 
+// Named functions supaya bisa di-remove dengan benar
+const handleStart = () => {
+
+    isLoading.value = true;
+
+    showUserDropdown.value = false;
+    sidebarOpen.value = false;
+};
+
+const handleFinish = () => {
+
+    setTimeout(() => {
+        isLoading.value = false;
+    }, 300);
+
+    logsOpen.value = route().current('logs.*');
+};
+
 onMounted(() => {
-    window.addEventListener('scroll', onScroll, { passive: true });
+    removeStart = router.on('start', handleStart);
+    removeFinish = router.on('finish', handleFinish);
+
+    window.addEventListener('scroll', onScroll, {
+        passive: true,
+    });
 });
 
 onUnmounted(() => {
+    removeStart?.();
+    removeFinish?.();
+
     window.removeEventListener('scroll', onScroll);
 });
 
@@ -129,6 +139,28 @@ const subLinkClass = (name) => [
 
 <template>
     <Toast />
+
+    <!-- Loading dots -->
+<!-- Loading -->
+<Transition
+    enter-active-class="transition-opacity duration-200"
+    enter-from-class="opacity-0"
+    leave-active-class="transition-opacity duration-200"
+    leave-to-class="opacity-0"
+>
+    <div
+        v-if="isLoading"
+        class="fixed inset-0 z-[9999] bg-white/20 backdrop-blur-[1px] pointer-events-none"
+    >
+        <div class="absolute inset-0 flex items-center justify-center">
+            <div class="loading-dots">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </div>
+    </div>
+</Transition>
 
     <!-- ── Fix #1: Layout pakai lg:flex di root, sidebar lg:static ── -->
     <div class="min-h-screen bg-gray-50 lg:flex">
@@ -475,3 +507,42 @@ const subLinkClass = (name) => [
         </Transition>
     </Teleport>
 </template>
+
+<style scoped>
+.loading-dots{
+    display:flex;
+    align-items:center;
+    gap:8px;
+}
+
+.loading-dots span{
+    width:10px;
+    height:10px;
+    border-radius:9999px;
+    background:#4f46e5;
+    animation:dotPulse .9s infinite ease-in-out;
+}
+
+.loading-dots span:nth-child(2){
+    animation-delay:.15s;
+}
+
+.loading-dots span:nth-child(3){
+    animation-delay:.30s;
+}
+
+@keyframes dotPulse{
+
+    0%,
+    80%,
+    100%{
+        transform:scale(.5);
+        opacity:.25;
+    }
+
+    40%{
+        transform:scale(1);
+        opacity:1;
+    }
+}
+</style>

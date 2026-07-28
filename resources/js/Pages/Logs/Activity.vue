@@ -1,6 +1,7 @@
 <script setup>
 import AppLayout from '@/Layouts/AppLayout.vue';
-import { Link } from '@inertiajs/vue3';
+import { Link, router } from '@inertiajs/vue3';
+import { onMounted, onUnmounted } from 'vue';
 import {
     PlusCircle,
     UserPlus,
@@ -73,6 +74,22 @@ const avatarColor = (name) => {
     const index = name.charCodeAt(0) % avatarColors.length;
     return avatarColors[index];
 };
+
+let refreshInterval = null;
+
+onMounted(() => {
+    refreshInterval = setInterval(() => {
+        router.reload({
+            only: ['logs'],
+            preserveScroll: true,
+            preserveState: true,
+        });
+    }, 5000); // refresh setiap 5 detik
+});
+
+onUnmounted(() => {
+    clearInterval(refreshInterval);
+});
 </script>
 
 <template>
