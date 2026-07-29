@@ -18,7 +18,7 @@ import {
     LockIcon,
     AlertTriangle,
 } from 'lucide-vue-next';
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 
 const props = defineProps({
     ticket: Object,
@@ -33,22 +33,56 @@ const canManageTicket =
     currentUser.role === 'admin' ||
     currentUser.role === 'agent';
 
+// ── Fix #5: semua ref didefinisikan di atas sebelum fungsi yang memakainya ──
+const showResolveModal = ref(false);
+const showTakeOverModal = ref(false);
+const currentStatus = ref(props.ticket.status);
+const currentAssigneeId = ref(props.ticket.assignee_id);
+const currentAssigneeName = ref(props.ticket.assignee?.name ?? null);
+const imageInput = ref(null);
+const imagePreview = ref(null);
+
+// ── Fix #2: gunakan satu computed yang konsisten untuk semua locked check ──
 const isTicketLocked = computed(() =>
-    props.ticket.status === 'closed' ||
+    currentStatus.value === 'closed' ||
     (
-        props.ticket.status === 'resolved' &&
+        currentStatus.value === 'resolved' &&
         currentUser.role !== 'admin'
     )
 );
 
-const isClosed = computed(() => props.ticket.status === 'closed');
+// isClosed hanya untuk assign — sekarang konsisten pakai isTicketLocked
+const isAssignLocked = computed(() => isTicketLocked.value);
+
+// ── Fix #6: timeAgo reactive dengan interval ──
+const now = ref(Date.now());
+let timeInterval = null;
+
+onMounted(() => {
+    timeInterval = setInterval(() => {
+        now.value = Date.now();
+    }, 60000);
+});
+
+onUnmounted(() => {
+    // Hentikan timer
+    if (timeInterval) {
+        clearInterval(timeInterval);
+    }
+
+    // Bebaskan blob URL jika ada
+    if (
+        imagePreview.value &&
+        imagePreview.value.startsWith('blob:')
+    ) {
+        URL.revokeObjectURL(imagePreview.value);
+    }
+});
 
 // ── Status ────────────────────────────────────────────────
 const statusForm = useForm({ status: props.ticket.status });
-const currentStatus = ref(props.ticket.status);
 
 const updateStatus = () => {
-
     if (
         currentStatus.value === 'in_progress' &&
         statusForm.status === 'resolved'
@@ -56,7 +90,6 @@ const updateStatus = () => {
         showResolveModal.value = true;
         return;
     }
-
     saveStatus();
 };
 
@@ -66,62 +99,43 @@ const cancelResolve = () => {
 };
 
 const saveStatus = () => {
-
     statusForm.patch(route('tickets.status.update', props.ticket.id), {
         preserveScroll: true,
-
         onSuccess: () => {
             currentStatus.value = statusForm.status;
             showResolveModal.value = false;
         },
     });
-
 };
 
 // ── Assignee ──────────────────────────────────────────────
 const assigneeForm = useForm({ assignee_id: props.ticket.assignee_id });
-const currentAssigneeId = ref(props.ticket.assignee_id);
-const currentAssigneeName = ref(props.ticket.assignee?.name ?? null);
 
 const assignToMe = () => {
+    if (isAssignLocked.value) return;
 
-    if (isClosed.value) {
-        return;
-    }
-
-    // kalau tiket belum ada assignee langsung assign
     if (!currentAssigneeId.value) {
         executeAssign();
         return;
     }
 
-    // kalau sudah milik sendiri tidak usah apa-apa
-    if (currentAssigneeId.value === currentUser.id) {
-        return;
-    }
+    if (currentAssigneeId.value === currentUser.id) return;
 
-    // kalau milik orang lain tampilkan konfirmasi
     showTakeOverModal.value = true;
 };
 
 const executeAssign = () => {
-
-    if (isClosed.value) {
-        return;
-    }
+    if (isAssignLocked.value) return;
 
     assigneeForm.assignee_id = currentUser.id;
-
     assigneeForm.patch(route('tickets.assign', props.ticket.id), {
         preserveScroll: true,
-
         onSuccess: () => {
             currentAssigneeId.value = currentUser.id;
             currentAssigneeName.value = currentUser.name;
             showTakeOverModal.value = false;
         },
     });
-
 };
 
 const cancelTakeOver = () => {
@@ -130,8 +144,6 @@ const cancelTakeOver = () => {
 
 // ── Comment ───────────────────────────────────────────────
 const form = useForm({ comment: '', image: null });
-const imageInput = ref(null);
-const imagePreview = ref(null);
 
 const canSubmitComment = computed(() =>
     form.comment.trim().length > 0 || form.image !== null
@@ -147,19 +159,45 @@ const submitComment = () => {
             imagePreview.value = null;
             if (imageInput.value) imageInput.value.value = '';
         },
+        // ── Fix #7: reset preview kalau upload gagal ──
+        onError: () => {
+            if (form.errors.image) {
+                form.image = null;
+                imagePreview.value = null;
+                if (imageInput.value) imageInput.value.value = '';
+            }
+        },
     });
 };
+
+// ── Fix #4: batasi ukuran file & revoke object URL ──
+const MAX_IMAGE_SIZE_MB = 5;
 
 const onImageSelect = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+
+    if (file.size > MAX_IMAGE_SIZE_MB * 1024 * 1024) {
+        alert(`Image size must be less than ${MAX_IMAGE_SIZE_MB}MB.`);
+        if (imageInput.value) imageInput.value.value = '';
+        return;
+    }
+
+    // Revoke URL sebelumnya kalau ada untuk bebaskan memory
+    if (imagePreview.value && imagePreview.value.startsWith('blob:')) {
+        URL.revokeObjectURL(imagePreview.value);
+    }
+
     form.image = file;
-    const reader = new FileReader();
-    reader.onload = (ev) => { imagePreview.value = ev.target.result; };
-    reader.readAsDataURL(file);
+
+    // Pakai createObjectURL lebih efisien dari FileReader base64
+    imagePreview.value = URL.createObjectURL(file);
 };
 
 const removeImage = () => {
+    if (imagePreview.value && imagePreview.value.startsWith('blob:')) {
+        URL.revokeObjectURL(imagePreview.value);
+    }
     form.image = null;
     imagePreview.value = null;
     if (imageInput.value) imageInput.value.value = '';
@@ -217,9 +255,10 @@ const formatDate = (value) => {
     });
 };
 
+// ── Fix #6: timeAgo pakai now.value supaya reactive ──
 const timeAgo = (value) => {
     if (!value) return '';
-    const diff = Date.now() - new Date(value).getTime();
+    const diff = now.value - new Date(value).getTime();
     const minutes = Math.floor(diff / 60000);
     if (minutes < 1) return 'just now';
     if (minutes < 60) return `${minutes}m ago`;
@@ -228,9 +267,6 @@ const timeAgo = (value) => {
     const days = Math.floor(hours / 24);
     return `${days}d ago`;
 };
-
-const showResolveModal = ref(false);
-const showTakeOverModal = ref(false);
 </script>
 
 <template>
@@ -306,7 +342,7 @@ const showTakeOverModal = ref(false);
                                 </select>
                                 <button
                                     type="button"
-                                    :disabled="statusForm.processing || statusForm.status === currentStatus"
+                                    :disabled="statusForm.processing || statusForm.status === currentStatus || isTicketLocked"
                                     class="rounded-lg bg-indigo-600 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-50"
                                     @click="updateStatus"
                                 >
@@ -402,53 +438,37 @@ const showTakeOverModal = ref(false);
                             <!-- Belum ada assignee -->
                             <template v-if="!currentAssigneeId">
                                 <div class="flex items-center gap-3">
-                                    <div
-                                        class="flex items-center gap-2 rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-2"
-                                    >
+                                    <div class="flex items-center gap-2 rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-2">
                                         <div
                                             class="flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold opacity-50"
                                             :class="avatarColor(currentUser.name)"
                                         >
                                             {{ initials(currentUser.name) }}
                                         </div>
-
-                                        <span class="text-sm text-gray-400">
-                                            {{ currentUser.name }}
-                                        </span>
+                                        <span class="text-sm text-gray-400">{{ currentUser.name }}</span>
                                     </div>
 
                                     <button
                                         type="button"
-                                        :disabled="assigneeForm.processing || isClosed"
+                                        :disabled="assigneeForm.processing || isAssignLocked"
                                         :class="[
                                             'inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition',
-                                            isClosed
+                                            isAssignLocked
                                                 ? 'cursor-not-allowed bg-gray-300 text-white'
                                                 : 'bg-indigo-600 text-white hover:bg-indigo-700'
                                         ]"
                                         @click="assignToMe"
                                     >
                                         <UserPlus class="h-3.5 w-3.5" />
-
-                                        {{
-                                            assigneeForm.processing
-                                                ? 'Assigning...'
-                                                : isClosed
-                                                    ? 'Assign Disabled'
-                                                    : 'Assign to Me'
-                                        }}
+                                        {{ assigneeForm.processing ? 'Assigning...' : isAssignLocked ? 'Assign Disabled' : 'Assign to Me' }}
                                     </button>
                                 </div>
 
                                 <p
                                     class="mt-1.5 text-xs"
-                                    :class="isClosed ? 'font-medium text-red-500' : 'text-gray-400'"
+                                    :class="isAssignLocked ? 'font-medium text-red-500' : 'text-gray-400'"
                                 >
-                                    {{
-                                        isClosed
-                                            ? 'This ticket has been closed and cannot be assigned.'
-                                            : 'No one is assigned yet. Click to take this ticket.'
-                                    }}
+                                    {{ isAssignLocked ? 'This ticket is locked and cannot be assigned.' : 'No one is assigned yet. Click to take this ticket.' }}
                                 </p>
                             </template>
 
@@ -478,44 +498,30 @@ const showTakeOverModal = ref(false);
                                         >
                                             {{ initials(currentAssigneeName) }}
                                         </div>
-
-                                        <span class="text-sm font-medium text-gray-700">
-                                            {{ currentAssigneeName }}
-                                        </span>
+                                        <span class="text-sm font-medium text-gray-700">{{ currentAssigneeName }}</span>
                                     </div>
 
                                     <button
                                         type="button"
-                                        :disabled="assigneeForm.processing || isClosed"
+                                        :disabled="assigneeForm.processing || isAssignLocked"
                                         :class="[
                                             'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition',
-                                            isClosed
+                                            isAssignLocked
                                                 ? 'cursor-not-allowed border border-gray-300 bg-gray-100 text-gray-400'
                                                 : 'border border-indigo-200 bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
                                         ]"
                                         @click="assignToMe"
                                     >
                                         <UserPlus class="h-3.5 w-3.5" />
-
-                                        {{
-                                            assigneeForm.processing
-                                                ? 'Assigning...'
-                                                : isClosed
-                                                    ? 'Take Over Disabled'
-                                                    : 'Take Over'
-                                        }}
+                                        {{ assigneeForm.processing ? 'Assigning...' : isAssignLocked ? 'Take Over Disabled' : 'Take Over' }}
                                     </button>
                                 </div>
 
                                 <p
                                     class="mt-1.5 text-xs"
-                                    :class="isClosed ? 'font-medium text-red-500' : 'text-gray-400'"
+                                    :class="isAssignLocked ? 'font-medium text-red-500' : 'text-gray-400'"
                                 >
-                                    {{
-                                        isClosed
-                                            ? 'This ticket has been closed and can no longer be reassigned.'
-                                            : 'Click "Take over" to reassign this ticket to yourself.'
-                                    }}
+                                    {{ isAssignLocked ? 'This ticket is locked and can no longer be reassigned.' : 'Click "Take over" to reassign this ticket to yourself.' }}
                                 </p>
                             </template>
                         </template>
@@ -547,15 +553,11 @@ const showTakeOverModal = ref(false);
                 </div>
 
                 <!-- Attachments -->
-                <div
-                    v-if="ticket.attachments?.length"
-                    class="border-t border-gray-100 px-6 py-5"
-                >
+                <div v-if="ticket.attachments?.length" class="border-t border-gray-100 px-6 py-5">
                     <h2 class="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-700">
                         <Paperclip class="h-4 w-4 text-gray-400" />
                         Attachments
                     </h2>
-
                     <div class="flex flex-wrap gap-2">
                         <a
                             v-for="file in ticket.attachments"
@@ -630,7 +632,6 @@ const showTakeOverModal = ref(false);
 
                 <!-- Add Comment -->
                 <div class="border-t border-gray-100 px-6 py-5">
-                    <!-- Warning tiket locked -->
                     <div
                         v-if="isTicketLocked"
                         class="mb-4 flex items-start gap-2.5 rounded-xl bg-amber-50 p-3.5 text-sm text-amber-700 ring-1 ring-inset ring-amber-600/10"
@@ -742,7 +743,10 @@ const showTakeOverModal = ref(false);
                 </div>
             </div>
         </div>
+
+        <!-- Modals -->
         <Teleport to="body">
+            <!-- Resolve Confirmation -->
             <Transition
                 enter-active-class="transition duration-200 ease-out"
                 enter-from-class="opacity-0"
@@ -764,117 +768,65 @@ const showTakeOverModal = ref(false);
                             v-if="showResolveModal"
                             class="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5"
                         >
-
-                            <!-- Header -->
                             <div class="flex items-start justify-between border-b border-gray-100 px-6 py-5">
-
                                 <div class="flex items-center gap-3">
-
                                     <div class="flex h-10 w-10 items-center justify-center rounded-full bg-amber-50">
                                         <AlertTriangle class="h-5 w-5 text-amber-600" />
                                     </div>
-
                                     <div>
-                                        <h3 class="text-base font-semibold text-gray-900">
-                                            Resolve Ticket
-                                        </h3>
-
-                                        <p class="text-xs text-gray-400">
-                                            This action cannot be undone
-                                        </p>
+                                        <h3 class="text-base font-semibold text-gray-900">Resolve Ticket</h3>
+                                        <p class="text-xs text-gray-400">This action cannot be undone</p>
                                     </div>
-
                                 </div>
-
                                 <button
                                     class="rounded-lg p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
                                     @click="cancelResolve"
                                 >
                                     <X class="h-4 w-4" />
                                 </button>
-
                             </div>
 
-                            <!-- Body -->
                             <div class="px-6 py-5">
-
                                 <p class="text-sm text-gray-600">
                                     Once this ticket is marked as
-                                    <span class="font-semibold text-green-600">
-                                        Resolved
-                                    </span>,
-                                    it cannot be changed back to
-                                    <strong>Open</strong> or
-                                    <strong>In Progress</strong>.
+                                    <span class="font-semibold text-green-600">Resolved</span>,
+                                    it cannot be changed back to <strong>Open</strong> or <strong>In Progress</strong>.
                                 </p>
-
-                                <div
-                                    class="mt-4 rounded-xl border border-gray-100 bg-gray-50 p-4"
-                                >
-
-                                    <div class="text-xs text-gray-400">
-                                        Ticket
-                                    </div>
-
-                                    <div class="mt-1 font-semibold text-gray-800">
-                                        #{{ ticket.id }} - {{ ticket.title }}
-                                    </div>
-
+                                <div class="mt-4 rounded-xl border border-gray-100 bg-gray-50 p-4">
+                                    <div class="text-xs text-gray-400">Ticket</div>
+                                    <div class="mt-1 font-semibold text-gray-800">#{{ ticket.id }} - {{ ticket.title }}</div>
                                     <div class="mt-3 flex justify-between text-sm">
-
-                                        <span class="text-gray-500">
-                                            Current Status
-                                        </span>
-
-                                        <span class="font-medium capitalize">
-                                            {{ statusLabel[currentStatus] }}
-                                        </span>
-
+                                        <span class="text-gray-500">Current Status</span>
+                                        <span class="font-medium capitalize">{{ statusLabel[currentStatus] }}</span>
                                     </div>
-
                                     <div class="mt-2 flex justify-between text-sm">
-
-                                        <span class="text-gray-500">
-                                            New Status
-                                        </span>
-
-                                        <span class="font-semibold text-green-600">
-                                            Resolved
-                                        </span>
-
+                                        <span class="text-gray-500">New Status</span>
+                                        <span class="font-semibold text-green-600">Resolved</span>
                                     </div>
-
                                 </div>
-
                             </div>
 
-                            <!-- Footer -->
                             <div class="flex justify-end gap-2.5 border-t border-gray-100 bg-gray-50/60 px-6 py-4">
-
                                 <button
                                     class="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-600 transition hover:bg-gray-100"
                                     @click="cancelResolve"
                                 >
                                     Cancel
                                 </button>
-
                                 <button
                                     class="inline-flex items-center gap-2 rounded-xl bg-green-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-green-700 disabled:opacity-50"
                                     :disabled="statusForm.processing"
                                     @click="saveStatus"
                                 >
                                     <AlertTriangle class="h-4 w-4" />
-
                                     {{ statusForm.processing ? 'Saving...' : 'Resolve Ticket' }}
-
                                 </button>
-
                             </div>
-
                         </div>
                     </Transition>
                 </div>
             </Transition>
+
             <!-- Take Over Confirmation -->
             <Transition
                 enter-active-class="transition duration-200 ease-out"
@@ -897,102 +849,61 @@ const showTakeOverModal = ref(false);
                             v-if="showTakeOverModal"
                             class="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5"
                         >
-
-                            <!-- Header -->
                             <div class="flex items-start justify-between border-b border-gray-100 px-6 py-5">
-
                                 <div class="flex items-center gap-3">
-
                                     <div class="flex h-10 w-10 items-center justify-center rounded-full bg-amber-50">
                                         <AlertTriangle class="h-5 w-5 text-amber-600" />
                                     </div>
-
                                     <div>
-                                        <h3 class="text-base font-semibold text-gray-900">
-                                            Take Over Ticket
-                                        </h3>
-
-                                        <p class="text-xs text-gray-400">
-                                            This action will reassign the ticket
-                                        </p>
+                                        <h3 class="text-base font-semibold text-gray-900">Take Over Ticket</h3>
+                                        <p class="text-xs text-gray-400">This action will reassign the ticket</p>
                                     </div>
-
                                 </div>
-
                                 <button
                                     class="rounded-lg p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
                                     @click="cancelTakeOver"
                                 >
                                     <X class="h-4 w-4" />
                                 </button>
-
                             </div>
 
-                            <!-- Body -->
                             <div class="px-6 py-5">
-
                                 <p class="text-sm text-gray-600">
                                     This ticket is currently assigned to
-                                    <span class="font-semibold">
-                                        {{ currentAssigneeName }}
-                                    </span>.
+                                    <span class="font-semibold">{{ currentAssigneeName }}</span>.
                                     <br><br>
                                     Are you sure you want to take over this ticket?
                                 </p>
-
-                                <div
-                                    class="mt-4 rounded-xl border border-gray-100 bg-gray-50 p-4"
-                                >
-                                    <div class="text-xs text-gray-400">
-                                        Ticket
-                                    </div>
-
-                                    <div class="mt-1 font-semibold text-gray-800">
-                                        #{{ ticket.id }} - {{ ticket.title }}
-                                    </div>
-
+                                <div class="mt-4 rounded-xl border border-gray-100 bg-gray-50 p-4">
+                                    <div class="text-xs text-gray-400">Ticket</div>
+                                    <div class="mt-1 font-semibold text-gray-800">#{{ ticket.id }} - {{ ticket.title }}</div>
                                     <div class="mt-3 flex justify-between text-sm">
                                         <span class="text-gray-500">Current Assignee</span>
-
-                                        <span class="font-medium">
-                                            {{ currentAssigneeName }}
-                                        </span>
+                                        <span class="font-medium">{{ currentAssigneeName }}</span>
                                     </div>
-
                                     <div class="mt-2 flex justify-between text-sm">
                                         <span class="text-gray-500">New Assignee</span>
-
-                                        <span class="font-semibold text-indigo-600">
-                                            {{ currentUser.name }}
-                                        </span>
+                                        <span class="font-semibold text-indigo-600">{{ currentUser.name }}</span>
                                     </div>
-
                                 </div>
-
                             </div>
 
-                            <!-- Footer -->
                             <div class="flex justify-end gap-2.5 border-t border-gray-100 bg-gray-50/60 px-6 py-4">
-
                                 <button
                                     class="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-600 transition hover:bg-gray-100"
                                     @click="cancelTakeOver"
                                 >
                                     Cancel
                                 </button>
-
                                 <button
                                     class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-50"
                                     :disabled="assigneeForm.processing"
                                     @click="executeAssign"
                                 >
                                     <UserPlus class="h-4 w-4" />
-
                                     {{ assigneeForm.processing ? 'Taking Over...' : 'Take Over Ticket' }}
                                 </button>
-
                             </div>
-
                         </div>
                     </Transition>
                 </div>
