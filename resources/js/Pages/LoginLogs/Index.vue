@@ -2,8 +2,26 @@
 import AppLayout from '@/Layouts/AppLayout.vue';
 
 defineProps({
-    logs: Object,
+    logs: {
+        type: Object,
+        default: () => ({
+            data: [],
+            links: [],
+        }),
+    },
 });
+
+const formatDate = (date) => {
+    if (!date) return '-';
+
+    return new Date(date).toLocaleString('id-ID', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+};
 </script>
 
 <template>
@@ -17,7 +35,7 @@ defineProps({
     </h1>
 
 
-    <div class="overflow-hidden rounded-lg border bg-white shadow">
+    <div class="overflow-x-auto rounded-lg border bg-white shadow">
 
         <table class="w-full">
 
@@ -40,18 +58,10 @@ defineProps({
                     <th class="p-3 text-left">
                         Login Time
                     </th>
-
-                    <!-- <th class="p-3 text-left">
-                        Browser
-                    </th> -->
-
                 </tr>
-
             </thead>
 
-
-            <tbody>
-
+            <tbody v-if="logs?.data?.length">
                 <tr
                     v-for="log in logs.data"
                     :key="log.id"
@@ -61,52 +71,41 @@ defineProps({
                     <td class="p-3">
 
                         <div class="font-medium">
-                            {{ log.user?.name }}
+                            {{ log.user?.name ?? 'Deleted User' }}
                         </div>
 
                         <div class="text-sm text-gray-500">
-                            {{ log.user?.email }}
+                            {{ log.user?.email ?? '-' }}
                         </div>
 
                     </td>
 
-
                     <td class="p-3 capitalize">
-                        {{ log.user?.role }}
+                        {{ log.user?.role ?? '-' }}
                     </td>
-
 
                     <td class="p-3">
-                        {{ log.ip_address }}
+                        {{ log.ip_address ?? '-' }}
                     </td>
-
 
                     <td class="p-3">
-
-                        {{
-                            new Date(
-                                log.login_at
-                            ).toLocaleString()
-                        }}
-
+                        {{ formatDate(log.login_at) }}
                     </td>
-
-
-                    <!-- <td class="max-w-xs truncate p-3 text-sm text-gray-500">
-
-                        {{ log.user_agent }}
-
-                    </td> -->
-
-
                 </tr>
-
             </tbody>
 
+            <tbody v-else>
+                <tr>
+                    <td
+                        colspan="4"
+                        class="p-10 text-center text-gray-400"
+                    >
+                        No login history found.
+                    </td>
+                </tr>
+            </tbody>
         </table>
-
     </div>
-
 </div>
 
 </AppLayout>

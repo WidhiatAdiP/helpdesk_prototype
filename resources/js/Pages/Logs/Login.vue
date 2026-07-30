@@ -4,10 +4,23 @@ import { Link } from '@inertiajs/vue3';
 import {
     LogIn,
     Globe,
+    ChevronLeft,
+    ChevronRight,
+    ChevronsLeft,
+    ChevronsRight,
 } from 'lucide-vue-next';
 
 defineProps({
-    logs: Object,
+    logs: {
+        type: Object,
+        default: () => ({
+            data: [],
+            links: [],
+            total: 0,
+            from: 0,
+            to: 0,
+        }),
+    },
 });
 
 const initials = (name) => {
@@ -30,7 +43,7 @@ const avatarColors = [
 ];
 
 const avatarColor = (name) => {
-    if (!name) return avatarColors[0];
+    if (!name?.length) return avatarColors[0];
     return avatarColors[name.charCodeAt(0) % avatarColors.length];
 };
 
@@ -61,7 +74,7 @@ const roleStyle = (role) => roleStyles[role] ?? roleStyles.user;
                 <div class="flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-1.5">
                     <LogIn class="h-4 w-4 text-gray-400" />
                     <span class="text-sm font-medium text-gray-600">
-                        {{ logs.total }} logins
+                        {{ logs.total ?? 0 }} logins
                     </span>
                 </div>
             </div>
@@ -116,7 +129,7 @@ const roleStyle = (role) => roleStyles[role] ?? roleStyles.user;
                                 <td class="px-5 py-4">
                                     <span class="inline-flex items-center gap-1.5 rounded-md bg-gray-100 px-2.5 py-1 font-mono text-xs text-gray-600">
                                         <Globe class="h-3 w-3 text-gray-400" />
-                                        {{ log.ip_address }}
+                                        {{ log.ip_address ?? '-' }}
                                     </span>
                                 </td>
 
@@ -167,28 +180,59 @@ const roleStyle = (role) => roleStyles[role] ?? roleStyles.user;
                 >
                     <p class="text-sm text-gray-500">
                         Showing
-                        <span class="font-medium text-gray-700">{{ logs.from }}</span>
-                        -
-                        <span class="font-medium text-gray-700">{{ logs.to }}</span>
+                        <span class="font-medium text-gray-700">{{ logs.from ?? 0 }}</span>
+                        –
+                        <span class="font-medium text-gray-700">{{ logs.to ?? 0 }}</span>
                         of
-                        <span class="font-medium text-gray-700">{{ logs.total }}</span>
+                        <span class="font-medium text-gray-700">{{ logs.total ?? 0 }}</span>
+                        records
                     </p>
 
-                    <div v-if="logs.links.length > 3" class="flex flex-wrap gap-1">
+                    <div class="flex items-center gap-2">
+                        <!-- First -->
                         <Link
-                            v-for="(link, index) in logs.links"
-                            :key="index"
-                            :href="link.url ?? '#'"
-                            v-html="link.label"
-                            class="min-w-[2.25rem] rounded-lg px-3 py-1.5 text-center text-sm font-medium transition-colors"
-                            :class="[
-                                link.active
-                                    ? 'bg-indigo-600 text-white shadow-sm'
-                                    : 'text-gray-600 hover:bg-gray-200',
-                                !link.url && 'pointer-events-none opacity-40',
-                            ]"
+                            :href="logs.first_page_url ?? '#'"
+                            class="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 transition hover:bg-gray-100"
+                            :class="{ 'pointer-events-none opacity-40': logs.current_page === 1 }"
                             preserve-scroll
-                        />
+                        >
+                            <ChevronsLeft class="h-4 w-4" />
+                        </Link>
+
+                        <!-- Previous -->
+                        <Link
+                            :href="logs.prev_page_url ?? '#'"
+                            class="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 transition hover:bg-gray-100"
+                            :class="{ 'pointer-events-none opacity-40': !logs.prev_page_url }"
+                            preserve-scroll
+                        >
+                            <ChevronLeft class="h-4 w-4" />
+                        </Link>
+
+                        <!-- Current Page -->
+                        <span class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700">
+                            {{ logs.current_page ?? 1 }} / {{ logs.last_page ?? 1 }}
+                        </span>
+
+                        <!-- Next -->
+                        <Link
+                            :href="logs.next_page_url ?? '#'"
+                            class="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 transition hover:bg-gray-100"
+                            :class="{ 'pointer-events-none opacity-40': !logs.next_page_url }"
+                            preserve-scroll
+                        >
+                            <ChevronRight class="h-4 w-4" />
+                        </Link>
+
+                        <!-- Last -->
+                        <Link
+                            :href="logs.last_page_url ?? '#'"
+                            class="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 transition hover:bg-gray-100"
+                            :class="{ 'pointer-events-none opacity-40': logs.current_page === logs.last_page }"
+                            preserve-scroll
+                        >
+                            <ChevronsRight class="h-4 w-4" />
+                        </Link>
                     </div>
                 </div>
             </div>

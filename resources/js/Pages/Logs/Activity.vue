@@ -8,10 +8,23 @@ import {
     RefreshCw,
     MessageSquare,
     Activity,
+    ChevronLeft,
+    ChevronRight,
+    ChevronsLeft,
+    ChevronsRight,
 } from 'lucide-vue-next';
 
 defineProps({
-    logs: Object,
+    logs: {
+        type: Object,
+        default: () => ({
+            data: [],
+            links: [],
+            total: 0,
+            from: 0,
+            to: 0,
+        }),
+    },
 });
 
 const actionConfig = {
@@ -48,7 +61,11 @@ const fallbackAction = {
     iconClass: 'text-gray-500',
 };
 
-const getAction = (action) => actionConfig[action] ?? { ...fallbackAction, label: action };
+const getAction = (action) =>
+    actionConfig[action] ?? {
+        ...fallbackAction,
+        label: action ?? 'Unknown',
+    };
 
 const initials = (name) => {
     if (!name) return '?';
@@ -70,26 +87,38 @@ const avatarColors = [
 ];
 
 const avatarColor = (name) => {
-    if (!name) return avatarColors[0];
+    if (!name?.length) return avatarColors[0];
     const index = name.charCodeAt(0) % avatarColors.length;
     return avatarColors[index];
 };
 
-let refreshInterval = null;
+// let refreshInterval = null;
+// let isRefreshing = false;
 
-onMounted(() => {
-    refreshInterval = setInterval(() => {
-        router.reload({
-            only: ['logs'],
-            preserveScroll: true,
-            preserveState: true,
-        });
-    }, 5000); // refresh setiap 5 detik
-});
+// onMounted(() => {
+//     refreshInterval = setInterval(() => {
 
-onUnmounted(() => {
-    clearInterval(refreshInterval);
-});
+//         if (isRefreshing) return;
+
+//         isRefreshing = true;
+
+//         router.reload({
+//             only: ['logs'],
+//             preserveScroll: true,
+//             preserveState: true,
+//             onFinish: () => {
+//                 isRefreshing = false;
+//             },
+//         });
+
+//     }, 5000);
+// });
+
+// onUnmounted(() => {
+//         if (refreshInterval) {
+//         clearInterval(refreshInterval);
+//     }
+// });
 </script>
 
 <template>
@@ -109,7 +138,7 @@ onUnmounted(() => {
                 <div class="flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-1.5">
                     <Activity class="h-4 w-4 text-gray-400" />
                     <span class="text-sm font-medium text-gray-600">
-                        {{ logs.total }} records
+                        {{ logs.total ?? 0 }} records
                     </span>
                 </div>
             </div>
@@ -155,7 +184,7 @@ onUnmounted(() => {
 
                                 <td class="px-5 py-4">
                                     <span class="inline-flex rounded-md bg-gray-100 px-2.5 py-1 font-mono text-xs font-medium text-gray-600">
-                                        #{{ log.ticket_id }}
+                                        #{{ log.ticket_id ?? '-' }}
                                     </span>
                                 </td>
 
@@ -174,11 +203,11 @@ onUnmounted(() => {
                                 </td>
 
                                 <td class="max-w-xs truncate px-5 py-4 text-sm text-gray-600">
-                                    {{ log.description }}
+                                    {{ log.description ?? '-' }}
                                 </td>
 
                                 <td class="whitespace-nowrap px-5 py-4 text-sm text-gray-400">
-                                    {{ log.time }}
+                                    {{ log.time ?? '-' }}
                                 </td>
                             </tr>
 
@@ -204,28 +233,58 @@ onUnmounted(() => {
                 >
                     <p class="text-sm text-gray-500">
                         Showing
-                        <span class="font-medium text-gray-700">{{ logs.from }}</span>
+                        <span class="font-medium text-gray-700">{{ logs.from ?? 0 }}</span>
                         -
-                        <span class="font-medium text-gray-700">{{ logs.to }}</span>
+                        <span class="font-medium text-gray-700">{{ logs.to ?? 0 }}</span>
                         of
-                        <span class="font-medium text-gray-700">{{ logs.total }}</span>
+                        <span class="font-medium text-gray-700">{{ logs.total ?? 0 }}</span>
                     </p>
 
-                    <div v-if="logs.links.length > 3" class="flex flex-wrap gap-1">
+                    <div class="flex items-center gap-2">
+                        <!-- First -->
                         <Link
-                            v-for="(link, index) in logs.links"
-                            :key="index"
-                            :href="link.url ?? '#'"
-                            v-html="link.label"
-                            class="min-w-[2.25rem] rounded-lg px-3 py-1.5 text-center text-sm font-medium transition-colors"
-                            :class="[
-                                link.active
-                                    ? 'bg-indigo-600 text-white shadow-sm'
-                                    : 'text-gray-600 hover:bg-gray-200',
-                                !link.url && 'pointer-events-none opacity-40',
-                            ]"
+                            :href="logs.first_page_url ?? '#'"
+                            class="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 transition hover:bg-gray-100"
+                            :class="{ 'pointer-events-none opacity-40': logs.current_page === 1 }"
                             preserve-scroll
-                        />
+                        >
+                            <ChevronsLeft class="h-4 w-4" />
+                        </Link>
+
+                        <!-- Previous -->
+                        <Link
+                            :href="logs.prev_page_url ?? '#'"
+                            class="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 transition hover:bg-gray-100"
+                            :class="{ 'pointer-events-none opacity-40': !logs.prev_page_url }"
+                            preserve-scroll
+                        >
+                            <ChevronLeft class="h-4 w-4" />
+                        </Link>
+
+                        <span class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700">
+                            {{ logs.current_page }} / {{ logs.last_page }}
+                        </span>
+
+                        <!-- Next -->
+                        <Link
+                            :href="logs.next_page_url ?? '#'"
+                            class="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 transition hover:bg-gray-100"
+                            :class="{ 'pointer-events-none opacity-40': !logs.next_page_url }"
+                            preserve-scroll
+                        >
+                            <ChevronRight class="h-4 w-4" />
+                        </Link>
+
+                        <!-- Last -->
+                        <Link
+                            :href="logs.last_page_url ?? '#'"
+                            class="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 transition hover:bg-gray-100"
+                            :class="{ 'pointer-events-none opacity-40': logs.current_page === logs.last_page }"
+                            preserve-scroll
+                        >
+                            <ChevronsRight class="h-4 w-4" />
+                        </Link>
+
                     </div>
                 </div>
             </div>

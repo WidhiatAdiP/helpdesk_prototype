@@ -41,35 +41,55 @@ const cancelDelete = () => {
 };
 
 const executeDelete = () => {
-    if (!userToDelete.value) return;
+    if (!userToDelete.value || form.processing) return;
 
     form.delete(route('users.destroy', userToDelete.value.id), {
         preserveScroll: true,
-        onFinish: () => {
+
+        onSuccess: () => {
             showDeleteModal.value = false;
             userToDelete.value = null;
+        },
+
+        onError: () => {
+            // Modal tetap terbuka supaya user tahu proses gagal.
+        },
+
+        onFinish: () => {
+            form.clearErrors();
         },
     });
 };
 
 const filteredUsers = computed(() => {
-    return props.users.filter((user) => {
-        const q = keyword.value.toLowerCase();
-        return (
-            user.name.toLowerCase().includes(q) ||
-            user.email.toLowerCase().includes(q) ||
-            user.role.toLowerCase().includes(q)
-        );
-    });
+    const q = keyword.value.trim().toLowerCase();
+
+    if (!q) return props.users;
+
+    return props.users.filter((user) =>
+        [
+            user.name,
+            user.email,
+            user.role,
+        ].some(value =>
+            value?.toLowerCase().includes(q)
+        )
+    );
 });
 
-watch(keyword, () => {
-    currentPage.value = 1;
-});
-
+// PENTING: totalPages HARUS dideklarasikan sebelum dipakai di watch() di bawah.
+// const/let masuk Temporal Dead Zone sampai baris deklarasinya dieksekusi,
+// jadi kalau watch(totalPages, ...) diletakkan sebelum baris ini,
+// akan muncul ReferenceError saat komponen pertama kali di-mount.
 const totalPages = computed(() =>
     Math.max(1, Math.ceil(filteredUsers.value.length / perPage))
 );
+
+watch(totalPages, (page) => {
+    if (currentPage.value > page) {
+        currentPage.value = page;
+    }
+});
 
 const paginatedUsers = computed(() => {
     const start = (currentPage.value - 1) * perPage;
@@ -108,21 +128,23 @@ const pageNumbers = computed(() => {
 });
 
 const goToPage = (page) => {
-    if (page === '...' || page < 1 || page > totalPages.value) return;
+    if (form.processing) return;
+
+    if (page === '...') return;
+
+    if (page < 1) return;
+
+    if (page > totalPages.value) return;
+
     currentPage.value = page;
 };
 
-const totalAdmin = computed(() =>
-    props.users.filter((u) => u.role === 'admin').length
-);
-
-const totalAgent = computed(() =>
-    props.users.filter((u) => u.role === 'agent').length
-);
-
-const totalUser = computed(() =>
-    props.users.filter((u) => u.role === 'user').length
-);
+const roleCounts = computed(() => {
+    return props.users.reduce((acc, user) => {
+        acc[user.role] = (acc[user.role] || 0) + 1;
+        return acc;
+    }, {});
+});
 
 const roleStyle = {
     admin: 'bg-red-50 text-red-700 ring-1 ring-inset ring-red-600/20',
@@ -186,7 +208,7 @@ const avatarColor = (name) => {
                         <ShieldCheck class="h-5 w-5 text-red-300" />
                     </div>
                     <h2 class="mt-2 text-3xl font-bold text-red-700">
-                        {{ totalAdmin }}
+                        {{ roleCounts.admin ?? 0 }}
                     </h2>
                 </div>
 
@@ -196,7 +218,7 @@ const avatarColor = (name) => {
                         <Headset class="h-5 w-5 text-blue-300" />
                     </div>
                     <h2 class="mt-2 text-3xl font-bold text-blue-700">
-                        {{ totalAgent }}
+                        {{ roleCounts.agent ?? 0 }}
                     </h2>
                 </div>
 
@@ -206,7 +228,7 @@ const avatarColor = (name) => {
                         <User class="h-5 w-5 text-green-300" />
                     </div>
                     <h2 class="mt-2 text-3xl font-bold text-green-700">
-                        {{ totalUser }}
+                        {{ roleCounts.user ?? 0 }}
                     </h2>
                 </div>
             </div>
