@@ -34,9 +34,12 @@ const updateUser = () => {
 };
 
 // Cegah admin menurunkan role akunnya sendiri (menghindari admin terkunci akses)
-const isEditingSelf = computed(
-    () => page.props.auth.user.id === props.user.id
-);
+const isEditingSelf = computed(() => {
+    const authUserId = Number(page.props.auth?.user?.id);
+    const editingUserId = Number(props.user?.id);
+
+    return authUserId === editingUserId;
+});
 
 const isSelfAdminLocked = computed(
     () => isEditingSelf.value && props.user.role === 'admin'
@@ -81,9 +84,12 @@ const avatarColors = [
     'bg-violet-100 text-violet-700',
 ];
 
-const avatarColor = (name) => {
-    if (!name) return avatarColors[0];
-    return avatarColors[name.charCodeAt(0) % avatarColors.length];
+const avatarColor = (name = '') => {
+    if (!name.length) return avatarColors[0];
+
+    return avatarColors[
+        name.charCodeAt(0) % avatarColors.length
+    ];
 };
 </script>
 
@@ -97,7 +103,7 @@ const avatarColor = (name) => {
                         class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-base font-semibold"
                         :class="avatarColor(user.name)"
                     >
-                        {{ user.name.charAt(0).toUpperCase() }}
+                        {{ (user.name ?? '?').charAt(0).toUpperCase() }}
                     </div>
                     <div>
                         <h1 class="text-2xl font-bold tracking-tight text-gray-900">
@@ -148,7 +154,7 @@ const avatarColor = (name) => {
                 <form class="space-y-5" @submit.prevent="updateUser">
                     <!-- Name -->
                     <div>
-                        <label class="mb-1.5 block text-sm font-semibold text-gray-700">
+                        <label for="name" class="mb-1.5 block text-sm font-semibold text-gray-700">
                             Full Name
                         </label>
 
@@ -156,8 +162,11 @@ const avatarColor = (name) => {
                             <User class="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
 
                             <input
+                                id="name"
                                 v-model="form.name"
                                 type="text"
+                                required
+                                autocomplete="name"
                                 class="w-full rounded-xl border py-2.5 pl-10 pr-4 text-sm transition focus:outline-none focus:ring-2"
                                 :class="form.errors.name
                                     ? 'border-red-300 focus:ring-red-100'
@@ -172,7 +181,7 @@ const avatarColor = (name) => {
 
                     <!-- Email -->
                     <div>
-                        <label class="mb-1.5 block text-sm font-semibold text-gray-700">
+                        <label for="email" class="mb-1.5 block text-sm font-semibold text-gray-700">
                             Email Address
                         </label>
 
@@ -180,8 +189,11 @@ const avatarColor = (name) => {
                             <Mail class="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
 
                             <input
+                                id="email"
                                 v-model="form.email"
                                 type="email"
+                                required
+                                autocomplete="email"
                                 class="w-full rounded-xl border py-2.5 pl-10 pr-4 text-sm transition focus:outline-none focus:ring-2"
                                 :class="form.errors.email
                                     ? 'border-red-300 focus:ring-red-100'
@@ -230,6 +242,7 @@ const avatarColor = (name) => {
                                     v-model="form.role"
                                     :value="option.value"
                                     type="radio"
+                                    name="role"
                                     class="hidden"
                                     :disabled="isOptionDisabled(option.value)"
                                 >
@@ -238,6 +251,7 @@ const avatarColor = (name) => {
                                     v-if="isOptionDisabled(option.value)"
                                     class="absolute right-3 top-3"
                                     title="Disabled to prevent self lock-out"
+                                    aria-hidden="true"
                                 >
                                     <Lock class="h-3.5 w-3.5 text-gray-400" />
                                 </div>
@@ -280,6 +294,7 @@ const avatarColor = (name) => {
                         <button
                             type="submit"
                             :disabled="form.processing"
+                            :aria-busy="form.processing"
                             class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-50"
                         >
                             <Save class="h-4 w-4" />

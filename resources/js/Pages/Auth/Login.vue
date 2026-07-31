@@ -56,7 +56,7 @@ const submit = () => {
         <form class="space-y-5" @submit.prevent="submit">
             <!-- Email -->
             <div>
-                <label class="mb-1.5 block text-sm font-semibold text-gray-700">
+                <label for="email" class="mb-1.5 block text-sm font-semibold text-gray-700">
                     Email Address
                 </label>
 
@@ -85,16 +85,16 @@ const submit = () => {
             <!-- Password -->
             <div>
                 <div class="mb-1.5 flex items-center justify-between">
-                    <label class="text-sm font-semibold text-gray-700">
+                    <label for="password" class="text-sm font-semibold text-gray-700">
                         Password
                     </label>
-                    <Link
+                    <!-- <Link
                         v-if="canResetPassword"
                         :href="route('password.request')"
                         class="text-xs font-medium text-indigo-600 transition hover:text-indigo-800"
                     >
                         Forgot password?
-                    </Link>
+                    </Link> -->
                 </div>
 
                 <div class="relative">
@@ -113,6 +113,7 @@ const submit = () => {
                     >
                     <button
                         type="button"
+                        :aria-label="showPassword ? 'Hide password' : 'Show password'"
                         class="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 transition hover:text-gray-600"
                         @click="showPassword = !showPassword"
                     >
@@ -127,7 +128,7 @@ const submit = () => {
             </div>
 
             <!-- Remember me -->
-            <div class="flex items-center gap-2.5">
+            <!-- `<div class="flex items-center gap-2.5">
                 <input
                     id="remember"
                     v-model="form.remember"
@@ -137,7 +138,7 @@ const submit = () => {
                 <label for="remember" class="text-sm text-gray-600 cursor-pointer">
                     Remember me
                 </label>
-            </div>
+            </div>` -->
 
             <!-- Submit -->
             <button

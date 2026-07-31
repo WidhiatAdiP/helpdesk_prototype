@@ -107,7 +107,7 @@ const passwordStrength = computed(() => {
                 <form class="space-y-6" @submit.prevent="submit">
                     <!-- Name -->
                     <div>
-                        <label class="mb-1.5 block text-sm font-semibold text-gray-700">
+                        <label for="name" class="mb-1.5 block text-sm font-semibold text-gray-700">
                             Full Name
                         </label>
 
@@ -115,8 +115,12 @@ const passwordStrength = computed(() => {
                             <User class="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
 
                             <input
+                                id="name"
                                 v-model="form.name"
                                 type="text"
+                                required
+                                autofocus
+                                autocomplete="name"
                                 placeholder="Enter full name"
                                 class="w-full rounded-xl border py-2.5 pl-10 pr-4 text-sm transition focus:outline-none focus:ring-2"
                                 :class="form.errors.name
@@ -132,7 +136,7 @@ const passwordStrength = computed(() => {
 
                     <!-- Email -->
                     <div>
-                        <label class="mb-1.5 block text-sm font-semibold text-gray-700">
+                        <label for="email" class="mb-1.5 block text-sm font-semibold text-gray-700">
                             Email Address
                         </label>
 
@@ -140,8 +144,11 @@ const passwordStrength = computed(() => {
                             <Mail class="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
 
                             <input
+                                id="email"
                                 v-model="form.email"
                                 type="email"
+                                required
+                                autocomplete="email"
                                 placeholder="example@mail.com"
                                 class="w-full rounded-xl border py-2.5 pl-10 pr-4 text-sm transition focus:outline-none focus:ring-2"
                                 :class="form.errors.email
@@ -157,7 +164,7 @@ const passwordStrength = computed(() => {
 
                     <!-- Password -->
                     <div>
-                        <label class="mb-1.5 block text-sm font-semibold text-gray-700">
+                        <label for="password" class="mb-1.5 block text-sm font-semibold text-gray-700">
                             Password
                         </label>
 
@@ -165,8 +172,11 @@ const passwordStrength = computed(() => {
                             <Lock class="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
 
                             <input
+                                id="password"
                                 v-model="form.password"
                                 :type="showPassword ? 'text' : 'password'"
+                                required
+                                autocomplete="new-password"
                                 placeholder="Enter password"
                                 class="w-full rounded-xl border py-2.5 pl-10 pr-11 text-sm transition focus:outline-none focus:ring-2"
                                 :class="form.errors.password
@@ -176,6 +186,7 @@ const passwordStrength = computed(() => {
 
                             <button
                                 type="button"
+                                :aria-label="showPassword ? 'Hide password' : 'Show password'"
                                 class="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 transition hover:text-gray-600"
                                 @click="showPassword = !showPassword"
                             >
@@ -223,6 +234,7 @@ const passwordStrength = computed(() => {
                                     v-model="form.role"
                                     :value="option.value"
                                     type="radio"
+                                    name="role"
                                     class="hidden"
                                 >
 

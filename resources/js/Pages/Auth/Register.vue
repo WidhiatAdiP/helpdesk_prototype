@@ -1,10 +1,11 @@
 <script setup>
+import { ref } from 'vue';
 import GuestLayout from '@/Layouts/GuestLayout.vue';
-import InputError from '@/Components/InputError.vue';
-import InputLabel from '@/Components/InputLabel.vue';
-import PrimaryButton from '@/Components/PrimaryButton.vue';
-import TextInput from '@/Components/TextInput.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
+import { User, Mail, Lock, Eye, EyeOff, UserPlus } from 'lucide-vue-next';
+
+const showPassword = ref(false);
+const showPasswordConfirmation = ref(false);
 
 const form = useForm({
     name: '',
@@ -24,90 +25,162 @@ const submit = () => {
     <GuestLayout>
         <Head title="Register" />
 
-        <form @submit.prevent="submit">
+        <div class="mb-8">
+            <h1 class="text-2xl font-bold tracking-tight text-gray-900">
+                Create an account
+            </h1>
+            <p class="mt-1 text-sm text-gray-500">
+                Fill in your details to get started.
+            </p>
+        </div>
+
+        <form class="space-y-5" @submit.prevent="submit">
+            <!-- Name -->
             <div>
-                <InputLabel for="name" value="Name" />
+                <label for="name" class="mb-1.5 block text-sm font-semibold text-gray-700">
+                    Name
+                </label>
 
-                <TextInput
-                    id="name"
-                    type="text"
-                    class="mt-1 block w-full"
-                    v-model="form.name"
-                    required
-                    autofocus
-                    autocomplete="name"
-                />
+                <div class="relative">
+                    <User class="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                    <input
+                        id="name"
+                        v-model="form.name"
+                        type="text"
+                        required
+                        autofocus
+                        autocomplete="name"
+                        placeholder="Your full name"
+                        class="w-full rounded-xl border py-2.5 pl-10 pr-4 text-sm transition focus:outline-none focus:ring-2"
+                        :class="form.errors.name
+                            ? 'border-red-300 focus:ring-red-100'
+                            : 'border-gray-200 focus:border-indigo-500 focus:ring-indigo-100'"
+                    >
+                </div>
 
-                <InputError class="mt-2" :message="form.errors.name" />
+                <p v-if="form.errors.name" class="mt-1.5 text-sm text-red-500">
+                    {{ form.errors.name }}
+                </p>
             </div>
 
-            <div class="mt-4">
-                <InputLabel for="email" value="Email" />
+            <!-- Email -->
+            <div>
+                <label for="email" class="mb-1.5 block text-sm font-semibold text-gray-700">
+                    Email Address
+                </label>
 
-                <TextInput
-                    id="email"
-                    type="email"
-                    class="mt-1 block w-full"
-                    v-model="form.email"
-                    required
-                    autocomplete="username"
-                />
+                <div class="relative">
+                    <Mail class="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                    <input
+                        id="email"
+                        v-model="form.email"
+                        type="email"
+                        required
+                        autocomplete="username"
+                        placeholder="you@example.com"
+                        class="w-full rounded-xl border py-2.5 pl-10 pr-4 text-sm transition focus:outline-none focus:ring-2"
+                        :class="form.errors.email
+                            ? 'border-red-300 focus:ring-red-100'
+                            : 'border-gray-200 focus:border-indigo-500 focus:ring-indigo-100'"
+                    >
+                </div>
 
-                <InputError class="mt-2" :message="form.errors.email" />
+                <p v-if="form.errors.email" class="mt-1.5 text-sm text-red-500">
+                    {{ form.errors.email }}
+                </p>
             </div>
 
-            <div class="mt-4">
-                <InputLabel for="password" value="Password" />
+            <!-- Password -->
+            <div>
+                <label for="password" class="mb-1.5 block text-sm font-semibold text-gray-700">
+                    Password
+                </label>
 
-                <TextInput
-                    id="password"
-                    type="password"
-                    class="mt-1 block w-full"
-                    v-model="form.password"
-                    required
-                    autocomplete="new-password"
-                />
+                <div class="relative">
+                    <Lock class="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                    <input
+                        id="password"
+                        v-model="form.password"
+                        :type="showPassword ? 'text' : 'password'"
+                        required
+                        autocomplete="new-password"
+                        placeholder="Create a password"
+                        class="w-full rounded-xl border py-2.5 pl-10 pr-11 text-sm transition focus:outline-none focus:ring-2"
+                        :class="form.errors.password
+                            ? 'border-red-300 focus:ring-red-100'
+                            : 'border-gray-200 focus:border-indigo-500 focus:ring-indigo-100'"
+                    >
+                    <button
+                        type="button"
+                        :aria-label="showPassword ? 'Hide password' : 'Show password'"
+                        class="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 transition hover:text-gray-600"
+                        @click="showPassword = !showPassword"
+                    >
+                        <EyeOff v-if="showPassword" class="h-4 w-4" />
+                        <Eye v-else class="h-4 w-4" />
+                    </button>
+                </div>
 
-                <InputError class="mt-2" :message="form.errors.password" />
+                <p v-if="form.errors.password" class="mt-1.5 text-sm text-red-500">
+                    {{ form.errors.password }}
+                </p>
             </div>
 
-            <div class="mt-4">
-                <InputLabel
-                    for="password_confirmation"
-                    value="Confirm Password"
-                />
+            <!-- Confirm Password -->
+            <div>
+                <label for="password_confirmation" class="mb-1.5 block text-sm font-semibold text-gray-700">
+                    Confirm Password
+                </label>
 
-                <TextInput
-                    id="password_confirmation"
-                    type="password"
-                    class="mt-1 block w-full"
-                    v-model="form.password_confirmation"
-                    required
-                    autocomplete="new-password"
-                />
+                <div class="relative">
+                    <Lock class="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                    <input
+                        id="password_confirmation"
+                        v-model="form.password_confirmation"
+                        :type="showPasswordConfirmation ? 'text' : 'password'"
+                        required
+                        autocomplete="new-password"
+                        placeholder="Repeat your password"
+                        class="w-full rounded-xl border py-2.5 pl-10 pr-11 text-sm transition focus:outline-none focus:ring-2"
+                        :class="form.errors.password_confirmation
+                            ? 'border-red-300 focus:ring-red-100'
+                            : 'border-gray-200 focus:border-indigo-500 focus:ring-indigo-100'"
+                    >
+                    <button
+                        type="button"
+                        :aria-label="showPasswordConfirmation ? 'Hide password' : 'Show password'"
+                        class="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 transition hover:text-gray-600"
+                        @click="showPasswordConfirmation = !showPasswordConfirmation"
+                    >
+                        <EyeOff v-if="showPasswordConfirmation" class="h-4 w-4" />
+                        <Eye v-else class="h-4 w-4" />
+                    </button>
+                </div>
 
-                <InputError
-                    class="mt-2"
-                    :message="form.errors.password_confirmation"
-                />
+                <p v-if="form.errors.password_confirmation" class="mt-1.5 text-sm text-red-500">
+                    {{ form.errors.password_confirmation }}
+                </p>
             </div>
 
-            <div class="mt-4 flex items-center justify-end">
+            <!-- Submit -->
+            <button
+                type="submit"
+                :disabled="form.processing"
+                class="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-50"
+            >
+                <UserPlus class="h-4 w-4" />
+                {{ form.processing ? 'Creating account...' : 'Register' }}
+            </button>
+
+            <p class="text-center text-sm text-gray-500">
+                Already have an account?
                 <Link
                     :href="route('login')"
-                    class="rounded-md text-sm text-gray-600 underline hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                    class="font-medium text-indigo-600 transition hover:text-indigo-800"
                 >
-                    Already registered?
+                    Sign in
                 </Link>
-
-                <PrimaryButton
-                    class="ms-4"
-                    :class="{ 'opacity-25': form.processing }"
-                    :disabled="form.processing"
-                >
-                    Register
-                </PrimaryButton>
-            </div>
+            </p>
         </form>
     </GuestLayout>
 </template>

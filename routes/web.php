@@ -17,19 +17,31 @@ use App\Http\Controllers\ActivityLogController;
 
 
 Route::get('/', function () {
+    $recentTickets = \App\Models\Ticket::latest()
+        ->take(4)
+        ->select('id', 'title', 'status', 'priority')
+        ->get();
+
+    $totalTickets = \App\Models\Ticket::count();
+    $resolvedToday = \App\Models\Ticket::whereDate('updated_at', today())
+        ->where('status', 'resolved')
+        ->count();
+    $resolvedTotal = \App\Models\Ticket::where('status', 'resolved')->count();
 
     return Inertia::render('Welcome', [
-
         'canLogin' => Route::has('login'),
-
         'canRegister' => Route::has('register'),
-
         'laravelVersion' => Application::VERSION,
-
         'phpVersion' => PHP_VERSION,
-
+        'recentTickets' => $recentTickets,
+        'stats' => [
+            'total' => $totalTickets,
+            'resolvedToday' => $resolvedToday,
+            'resolutionRate' => $totalTickets > 0
+                ? round(($resolvedTotal / $totalTickets) * 100)
+                : 0,
+        ],
     ]);
-
 });
 
 Route::get('/dashboard', [DashboardController::class, 'index'])

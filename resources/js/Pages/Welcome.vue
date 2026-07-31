@@ -1,8 +1,9 @@
 <script setup>
-import { Head, Link } from '@inertiajs/vue3';
+import { computed } from 'vue';
+import { Head, Link, usePage } from '@inertiajs/vue3';
 import { Ticket, Shield, Headset, ArrowRight, CheckCircle2 } from 'lucide-vue-next';
 
-defineProps({
+const props = defineProps({
     canLogin: {
         type: Boolean,
     },
@@ -17,7 +18,18 @@ defineProps({
         type: String,
         required: true,
     },
+    recentTickets: {
+        type: Array,
+        default: () => [],
+    },
+    stats: {
+        type: Object,
+        default: () => ({ total: 0, resolvedToday: 0, resolutionRate: 0 }),
+    },
 });
+
+const page = usePage();
+const authUser = computed(() => page.props.auth?.user ?? null);
 
 const features = [
     {
@@ -48,6 +60,20 @@ const highlights = [
     'File attachment support',
     'Login history tracking',
 ];
+
+const statusStyle = {
+    open: 'bg-blue-50 text-blue-700 ring-blue-600/20',
+    in_progress: 'bg-yellow-50 text-yellow-700 ring-yellow-600/20',
+    resolved: 'bg-green-50 text-green-700 ring-green-600/20',
+    closed: 'bg-gray-100 text-gray-600 ring-gray-500/20',
+};
+
+const priorityStyle = {
+    urgent: 'bg-red-50 text-red-700',
+    high: 'bg-orange-50 text-orange-700',
+    medium: 'bg-blue-50 text-blue-700',
+    low: 'bg-gray-100 text-gray-600',
+};
 </script>
 
 <template>
@@ -66,9 +92,9 @@ const highlights = [
                     </span>
                 </div>
 
-                <nav v-if="canLogin" class="flex items-center gap-2">
+                <nav class="flex items-center gap-2">
                     <Link
-                        v-if="$page.props.auth.user"
+                        v-if="authUser"
                         :href="route('dashboard')"
                         class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-700"
                     >
@@ -76,7 +102,7 @@ const highlights = [
                         <ArrowRight class="h-3.5 w-3.5" />
                     </Link>
 
-                    <template v-else>
+                    <template v-else-if="canLogin">
                         <Link
                             :href="route('login')"
                             class="rounded-xl px-4 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-100 hover:text-gray-900"
@@ -118,7 +144,7 @@ const highlights = [
 
                 <div class="mt-10 flex flex-wrap items-center justify-center gap-3">
                     <Link
-                        v-if="!$page.props.auth.user"
+                        v-if="!authUser && canLogin"
                         :href="route('login')"
                         class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"
                     >
@@ -127,7 +153,7 @@ const highlights = [
                     </Link>
 
                     <Link
-                        v-else
+                        v-else-if="authUser"
                         :href="route('dashboard')"
                         class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"
                     >
@@ -188,7 +214,7 @@ const highlights = [
 
                             <div class="mt-10">
                                 <Link
-                                    v-if="!$page.props.auth.user"
+                                    v-if="!authUser && canLogin"
                                     :href="route('login')"
                                     class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"
                                 >
@@ -196,7 +222,7 @@ const highlights = [
                                     <ArrowRight class="h-4 w-4" />
                                 </Link>
                                 <Link
-                                    v-else
+                                    v-else-if="authUser"
                                     :href="route('dashboard')"
                                     class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"
                                 >
@@ -208,15 +234,9 @@ const highlights = [
 
                         <!-- Visual panel -->
                         <div class="rounded-2xl border border-gray-200 bg-gray-50 p-6">
-                            <!-- Fake ticket cards -->
                             <div class="space-y-3">
                                 <div
-                                    v-for="(item, i) in [
-                                        { id: 1042, title: 'Cannot access email account', status: 'open', priority: 'high', color: 'bg-blue-50 text-blue-700 ring-blue-600/20', pcolor: 'bg-orange-50 text-orange-700' },
-                                        { id: 1041, title: 'Printer not responding on floor 2', status: 'in_progress', priority: 'medium', color: 'bg-yellow-50 text-yellow-700 ring-yellow-600/20', pcolor: 'bg-blue-50 text-blue-700' },
-                                        { id: 1040, title: 'Software installation request', status: 'resolved', priority: 'low', color: 'bg-green-50 text-green-700 ring-green-600/20', pcolor: 'bg-gray-100 text-gray-600' },
-                                        { id: 1039, title: 'Network connectivity issue', status: 'closed', priority: 'urgent', color: 'bg-gray-100 text-gray-600 ring-gray-500/20', pcolor: 'bg-red-50 text-red-700' },
-                                    ]"
+                                    v-for="item in recentTickets"
                                     :key="item.id"
                                     class="flex items-center gap-3 rounded-xl border border-gray-200 bg-white p-3.5 shadow-sm"
                                 >
@@ -228,26 +248,33 @@ const highlights = [
 
                                     <span
                                         class="inline-flex shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset capitalize"
-                                        :class="item.color"
+                                        :class="statusStyle[item.status] ?? statusStyle.open"
                                     >
                                         {{ item.status.replace('_', ' ') }}
                                     </span>
 
                                     <span
                                         class="inline-flex shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium capitalize"
-                                        :class="item.pcolor"
+                                        :class="priorityStyle[item.priority] ?? priorityStyle.low"
                                     >
                                         {{ item.priority }}
                                     </span>
                                 </div>
+
+                                <p
+                                    v-if="recentTickets.length === 0"
+                                    class="py-6 text-center text-sm text-gray-400"
+                                >
+                                    No tickets yet
+                                </p>
                             </div>
 
                             <div class="mt-4 flex items-center justify-between rounded-xl bg-indigo-50 px-4 py-3">
                                 <p class="text-xs font-medium text-indigo-700">
-                                    4 tickets · 1 resolved today
+                                    {{ stats.total }} tickets · {{ stats.resolvedToday }} resolved today
                                 </p>
                                 <span class="text-xs text-indigo-500">
-                                    Resolution rate: 50%
+                                    Resolution rate: {{ stats.resolutionRate }}%
                                 </span>
                             </div>
                         </div>
