@@ -120,6 +120,12 @@ Route::middleware('auth')->group(function () {
         ]
     )->name('tickets.assign');
 
+    Route::get('/reports', [TicketController::class, 'report'])
+        ->name('reports.index');
+
+    Route::get('/reports/overview', [TicketController::class, 'reportOverview'])
+        ->name('reports.overview');
+
     /*
     |--------------------------------------------------------------------------
     | Users

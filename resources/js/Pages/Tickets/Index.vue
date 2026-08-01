@@ -7,6 +7,14 @@ import {
     Ticket,
     Plus,
     Filter,
+    ChevronDown,
+    User,
+    CalendarDays,
+    Tag,
+    Clock,
+    MessageSquare,
+    Paperclip,
+    ShieldCheck,
 } from 'lucide-vue-next';
 
 const page = usePage();
@@ -19,6 +27,40 @@ const props = defineProps({
 const search = ref(props.filters?.search ?? '');
 const status = ref(props.filters?.status ?? '');
 const category = ref(props.filters?.category ?? '');
+
+const expandedId = ref(null);
+
+const toggleExpand = (id) => {
+    expandedId.value = expandedId.value === id ? null : id;
+};
+
+const truncate = (text, length = 140) => {
+    if (!text) return '-';
+    return text.length > length ? text.slice(0, length) + '…' : text;
+};
+
+const formatDate = (value) => {
+    if (!value) return '-';
+    return new Date(value).toLocaleString('id-ID', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+};
+
+const timeAgo = (value) => {
+    if (!value) return '';
+    const diff = Date.now() - new Date(value).getTime();
+    const minutes = Math.floor(diff / 60000);
+    if (minutes < 1) return 'just now';
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+};
 
 const doSearch = () => {
     router.get(
@@ -132,67 +174,166 @@ const statusLabel = {
                                 <th class="px-5 py-3.5">Status</th>
                                 <th class="px-5 py-3.5">Priority</th>
                                 <th class="px-5 py-3.5">Assigned To</th>
+                                <th class="w-10 px-5 py-3.5"></th>
                             </tr>
                         </thead>
 
                         <tbody class="divide-y divide-gray-100">
-                            <tr
+                            <template
                                 v-for="(ticket, index) in tickets.data"
                                 :key="ticket.id"
-                                class="transition-colors hover:bg-gray-50/70"
                             >
-                                <td class="px-5 py-4 text-sm text-gray-400">
-                                    {{ tickets.from + index }}
-                                </td>
+                                <tr
+                                    class="cursor-pointer transition-colors hover:bg-gray-50/70"
+                                    @click="toggleExpand(ticket.id)"
+                                >
+                                    <td class="px-5 py-4 text-sm text-gray-400">
+                                        {{ tickets.from + index }}
+                                    </td>
 
-                                <td class="px-5 py-4">
-                                    <span class="font-mono text-xs font-medium text-gray-500">
-                                        #{{ ticket.id }}
-                                    </span>
-                                </td>
+                                    <td class="px-5 py-4">
+                                        <span class="font-mono text-xs font-medium text-gray-500">
+                                            #{{ ticket.id }}
+                                        </span>
+                                    </td>
 
-                                <td class="px-5 py-4">
-                                    <Link
-                                        :href="route('tickets.show', ticket.id)"
-                                        class="font-medium text-indigo-600 transition hover:text-indigo-800 hover:underline"
-                                    >
-                                        {{ ticket.title }}
-                                    </Link>
-                                </td>
+                                    <td class="px-5 py-4">
+                                        <Link
+                                            :href="route('tickets.show', ticket.id)"
+                                            class="font-medium text-indigo-600 transition hover:text-indigo-800 hover:underline"
+                                            @click.stop
+                                        >
+                                            {{ ticket.title }}
+                                        </Link>
+                                    </td>
 
-                                <td class="px-5 py-4 text-sm capitalize text-gray-600">
-                                    {{ ticket.category || '-' }}
-                                </td>
+                                    <td class="px-5 py-4 text-sm capitalize text-gray-600">
+                                        {{ ticket.category || '-' }}
+                                    </td>
 
-                                <td class="px-5 py-4">
-                                    <span
-                                        class="inline-flex rounded-full px-2.5 py-1 text-xs font-medium capitalize"
-                                        :class="statusConfig[ticket.status] ?? statusConfig.open"
-                                    >
-                                        {{ statusLabel[ticket.status] ?? ticket.status }}
-                                    </span>
-                                </td>
+                                    <td class="px-5 py-4">
+                                        <span
+                                            class="inline-flex rounded-full px-2.5 py-1 text-xs font-medium capitalize"
+                                            :class="statusConfig[ticket.status] ?? statusConfig.open"
+                                        >
+                                            {{ statusLabel[ticket.status] ?? ticket.status }}
+                                        </span>
+                                    </td>
 
-                                <td class="px-5 py-4">
-                                    <span
-                                        class="inline-flex rounded-full px-2.5 py-1 text-xs font-medium capitalize"
-                                        :class="priorityConfig[ticket.priority] ?? priorityConfig.medium"
-                                    >
-                                        {{ ticket.priority }}
-                                    </span>
-                                </td>
-                                <td class="px-5 py-4">
-                                    <span v-if="ticket.assignee" class="text-sm text-gray-700">
-                                        {{ ticket.assignee.name }}
-                                    </span>
-                                    <span v-else class="text-xs text-gray-400">
-                                        Unassigned
-                                    </span>
-                                </td>
-                            </tr>
+                                    <td class="px-5 py-4">
+                                        <span
+                                            class="inline-flex rounded-full px-2.5 py-1 text-xs font-medium capitalize"
+                                            :class="priorityConfig[ticket.priority] ?? priorityConfig.medium"
+                                        >
+                                            {{ ticket.priority }}
+                                        </span>
+                                    </td>
+
+                                    <td class="px-5 py-4">
+                                        <span v-if="ticket.assignee" class="text-sm text-gray-700">
+                                            {{ ticket.assignee.name }}
+                                        </span>
+                                        <span v-else class="text-xs text-gray-400">
+                                            Unassigned
+                                        </span>
+                                    </td>
+
+                                    <td class="px-5 py-4 text-right">
+                                        <ChevronDown
+                                            class="ml-auto h-4 w-4 text-gray-400 transition-transform duration-200"
+                                            :class="expandedId === ticket.id ? 'rotate-180' : ''"
+                                        />
+                                    </td>
+                                </tr>
+
+                                <!-- Dropdown detail singkat -->
+                                <tr v-if="expandedId === ticket.id">
+                                    <td colspan="8" class="bg-gray-50/60 px-5 py-5">
+                                        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                                            <div>
+                                                <p class="mb-1 flex items-center gap-1.5 text-xs font-medium text-gray-400">
+                                                    <User class="h-3.5 w-3.5" /> Created By
+                                                </p>
+                                                <p class="text-sm text-gray-700">{{ ticket.user?.name ?? '-' }}</p>
+                                            </div>
+
+                                            <div>
+                                                <p class="mb-1 flex items-center gap-1.5 text-xs font-medium text-gray-400">
+                                                    <CalendarDays class="h-3.5 w-3.5" /> Created At
+                                                </p>
+                                                <p class="text-sm text-gray-700">
+                                                    {{ formatDate(ticket.created_at) }}
+                                                    <span class="text-xs text-gray-400">({{ timeAgo(ticket.created_at) }})</span>
+                                                </p>
+                                            </div>
+
+                                            <div>
+                                                <p class="mb-1 flex items-center gap-1.5 text-xs font-medium text-gray-400">
+                                                    <Clock class="h-3.5 w-3.5" /> Last Updated
+                                                </p>
+                                                <p class="text-sm text-gray-700">
+                                                    {{ ticket.updated_at ? timeAgo(ticket.updated_at) : '-' }}
+                                                </p>
+                                            </div>
+
+                                            <div v-if="ticket.resolution">
+                                                <p class="mb-1 flex items-center gap-1.5 text-xs font-medium text-gray-400">
+                                                    <ShieldCheck class="h-3.5 w-3.5" /> Resolution
+                                                </p>
+                                                <p class="text-sm text-gray-700">
+                                                    {{ ticket.resolution.text }}
+                                                    <span
+                                                        class="ml-1 rounded px-1.5 py-0.5 text-xs"
+                                                        :class="ticket.resolution.within_sla
+                                                            ? 'bg-green-100 text-green-700'
+                                                            : 'bg-red-100 text-red-700'"
+                                                    >
+                                                        {{ ticket.resolution.within_sla ? 'Within SLA' : 'SLA Breached' }}
+                                                    </span>
+                                                </p>
+                                            </div>
+                                            <div v-else>
+                                                <p class="mb-1 flex items-center gap-1.5 text-xs font-medium text-gray-400">
+                                                    <ShieldCheck class="h-3.5 w-3.5" /> Resolution
+                                                </p>
+                                                <p class="text-sm text-gray-400">Not resolved yet</p>
+                                            </div>
+                                        </div>
+
+                                        <div class="mt-4">
+                                            <p class="mb-1 flex items-center gap-1.5 text-xs font-medium text-gray-400">
+                                                <Tag class="h-3.5 w-3.5" /> Description
+                                            </p>
+                                            <p class="text-sm leading-relaxed text-gray-600">
+                                                {{ truncate(ticket.description, 280) }}
+                                            </p>
+                                        </div>
+
+                                        <div class="mt-4 flex flex-wrap items-center gap-4 text-xs text-gray-500">
+                                            <span class="inline-flex items-center gap-1.5">
+                                                <MessageSquare class="h-3.5 w-3.5 text-gray-400" />
+                                                {{ ticket.comments_count ?? 0 }} comment{{ (ticket.comments_count ?? 0) === 1 ? '' : 's' }}
+                                            </span>
+                                            <span class="inline-flex items-center gap-1.5">
+                                                <Paperclip class="h-3.5 w-3.5 text-gray-400" />
+                                                {{ ticket.attachments_count ?? 0 }} attachment{{ (ticket.attachments_count ?? 0) === 1 ? '' : 's' }}
+                                            </span>
+                                        </div>
+
+                                        <div class="mt-4">
+                                            <Link
+                                                :href="route('tickets.show', ticket.id)"
+                                                class="text-sm font-medium text-indigo-600 hover:text-indigo-800 hover:underline"
+                                            >
+                                                Lihat detail lengkap →
+                                            </Link>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
 
                             <tr v-if="tickets.data.length === 0">
-                                <td colspan="7" class="px-5 py-16 text-center">
+                                <td colspan="8" class="px-5 py-16 text-center">
                                     <Ticket class="mx-auto mb-3 h-8 w-8 text-gray-300" />
                                     <p class="text-sm font-medium text-gray-500">No tickets found</p>
                                     <p class="mt-1 text-xs text-gray-400">

@@ -9,6 +9,7 @@ use App\Models\Attachment;
 use App\Helpers\ActivityLogger;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use Carbon\Carbon;
 
 class TicketController extends Controller
 {
@@ -24,6 +25,7 @@ class TicketController extends Controller
 
         $tickets = $query
             ->with(['user', 'assignee'])
+            ->withCount(['comments', 'attachments'])
             ->when($request->search,function($query,$search){
                 $query->where(
                     'title',
@@ -47,6 +49,12 @@ class TicketController extends Controller
             ->paginate(10)
             ->withQueryString();
 
+        // Hitung resolution time & SLA untuk setiap ticket yang sudah resolved
+        $tickets->getCollection()->transform(function ($ticket) {
+            $ticket->resolution = $this->calculateResolution($ticket);
+            return $ticket;
+        });
+
         return Inertia::render(
             'Tickets/Index',
             [
@@ -58,6 +66,318 @@ class TicketController extends Controller
                 ],
             ]
         );
+    }
+
+    public function report(Request $request)
+    {
+        if (
+            !auth()->user()->isAdmin() &&
+            !auth()->user()->isAgent()
+        ) {
+            abort(403);
+        }
+
+        $today = now()->endOfDay();
+
+        $endDate = $request->end_date
+            ? Carbon::parse($request->end_date)->endOfDay()
+            : $today;
+
+        // Batasi end_date tidak boleh melebihi hari ini
+        if ($endDate->gt($today)) {
+            $endDate = $today;
+        }
+
+        $startDate = $request->start_date
+            ? Carbon::parse($request->start_date)->startOfDay()
+            : $endDate->copy()->subDays(1)->startOfDay();
+
+        // Batasi start_date tidak boleh melebihi end_date
+        if ($startDate->gt($endDate)) {
+            $startDate = $endDate->copy()->startOfDay();
+        }
+
+        // Ticket yang dibuat dalam rentang tanggal
+        $createdTickets = Ticket::whereBetween('created_at', [$startDate, $endDate])
+            ->get(['id', 'created_at', 'status', 'priority', 'category']);
+
+        // Ticket yang resolved dalam rentang tanggal
+        $resolvedTickets = Ticket::whereNotNull('resolved_at')
+            ->whereBetween('resolved_at', [$startDate, $endDate])
+            ->get(['id', 'created_at', 'resolved_at', 'priority']);
+
+        // Siapkan slot tanggal kosong dari start sampai end
+        $days = [];
+        $cursor = $startDate->copy();
+        while ($cursor->lte($endDate)) {
+            $key = $cursor->format('Y-m-d');
+            $days[$key] = [
+                'date' => $key,
+                'label' => $cursor->translatedFormat('d M'),
+                'created_count' => 0,
+                'resolved_count' => 0,
+                'sla_met_count' => 0,
+                'sla_breach_count' => 0,
+            ];
+            $cursor->addDay();
+        }
+
+        // Hitung ticket dibuat per hari
+        foreach ($createdTickets as $ticket) {
+            $key = $ticket->created_at->format('Y-m-d');
+            if (isset($days[$key])) {
+                $days[$key]['created_count']++;
+            }
+        }
+
+        // SLA per priority (sama seperti calculateResolution)
+        $slaMap = [
+            'low' => 72,
+            'medium' => 24,
+            'high' => 8,
+            'urgent' => 4,
+        ];
+
+        // Hitung ticket resolved per hari + status SLA
+        foreach ($resolvedTickets as $ticket) {
+            $key = $ticket->resolved_at->format('Y-m-d');
+            if (!isset($days[$key])) {
+                continue;
+            }
+
+            $days[$key]['resolved_count']++;
+
+            $diffMinutes = $ticket->created_at->diffInMinutes($ticket->resolved_at);
+            $slaHours = $slaMap[$ticket->priority] ?? 24;
+
+            if ($diffMinutes <= ($slaHours * 60)) {
+                $days[$key]['sla_met_count']++;
+            } else {
+                $days[$key]['sla_breach_count']++;
+            }
+        }
+
+        $daily = array_values($days);
+
+        // Ringkasan status ticket yang dibuat dalam rentang tanggal
+        $statusSummary = [
+            'open' => 0,
+            'in_progress' => 0,
+            'resolved' => 0,
+            'closed' => 0,
+        ];
+        foreach ($createdTickets as $ticket) {
+            if (isset($statusSummary[$ticket->status])) {
+                $statusSummary[$ticket->status]++;
+            }
+        }
+
+        // Ringkasan priority ticket yang dibuat dalam rentang tanggal
+        $prioritySummary = [
+            'low' => 0,
+            'medium' => 0,
+            'high' => 0,
+            'urgent' => 0,
+        ];
+        foreach ($createdTickets as $ticket) {
+            if (isset($prioritySummary[$ticket->priority])) {
+                $prioritySummary[$ticket->priority]++;
+            }
+        }
+
+        $totalCreated = $createdTickets->count();
+        $totalResolved = $resolvedTickets->count();
+        $totalSlaMet = collect($daily)->sum('sla_met_count');
+        $totalSlaBreach = collect($daily)->sum('sla_breach_count');
+
+        $slaComplianceRate = $totalResolved > 0
+            ? round(($totalSlaMet / $totalResolved) * 100, 1)
+            : null;
+
+        $avgResolutionMinutes = $resolvedTickets->count() > 0
+            ? $resolvedTickets->avg(
+                fn ($t) => $t->created_at->diffInMinutes($t->resolved_at)
+            )
+            : 0;
+
+        $avgHours = intdiv((int) $avgResolutionMinutes, 60);
+        $avgMinutes = (int) $avgResolutionMinutes % 60;
+
+        return Inertia::render('Reports/Index', [
+            'daily' => $daily,
+            'summary' => [
+                'total_created' => $totalCreated,
+                'total_resolved' => $totalResolved,
+                'total_sla_met' => $totalSlaMet,
+                'total_sla_breach' => $totalSlaBreach,
+                'sla_compliance_rate' => $slaComplianceRate,
+                'avg_resolution_text' => "{$avgHours}h {$avgMinutes}m",
+            ],
+            'status_summary' => $statusSummary,
+            'priority_summary' => $prioritySummary,
+            'filters' => [
+                'start_date' => $startDate->format('Y-m-d'),
+                'end_date' => $endDate->format('Y-m-d'),
+            ],
+        ]);
+    }
+
+    public function reportOverview()
+    {
+        if (
+            !auth()->user()->isAdmin() &&
+            !auth()->user()->isAgent()
+        ) {
+            abort(403);
+        }
+
+        $allTickets = Ticket::all(['id', 'created_at', 'resolved_at', 'status', 'priority']);
+        $resolvedTickets = $allTickets->whereNotNull('resolved_at');
+
+        $totalCreated = $allTickets->count();
+        $totalResolved = $resolvedTickets->count();
+
+        // Status summary
+        $statusSummary = [
+            'open' => 0,
+            'in_progress' => 0,
+            'resolved' => 0,
+            'closed' => 0,
+        ];
+        foreach ($allTickets as $ticket) {
+            if (isset($statusSummary[$ticket->status])) {
+                $statusSummary[$ticket->status]++;
+            }
+        }
+
+        // Priority summary
+        $prioritySummary = [
+            'low' => 0,
+            'medium' => 0,
+            'high' => 0,
+            'urgent' => 0,
+        ];
+        foreach ($allTickets as $ticket) {
+            if (isset($prioritySummary[$ticket->priority])) {
+                $prioritySummary[$ticket->priority]++;
+            }
+        }
+
+        // SLA
+        $slaMap = [
+            'low' => 72,
+            'medium' => 24,
+            'high' => 8,
+            'urgent' => 4,
+        ];
+
+        $slaMet = 0;
+        $slaBreach = 0;
+
+        foreach ($resolvedTickets as $ticket) {
+            $diffMinutes = $ticket->created_at->diffInMinutes($ticket->resolved_at);
+            $slaHours = $slaMap[$ticket->priority] ?? 24;
+
+            if ($diffMinutes <= ($slaHours * 60)) {
+                $slaMet++;
+            } else {
+                $slaBreach++;
+            }
+        }
+
+        $slaComplianceRate = $totalResolved > 0
+            ? round(($slaMet / $totalResolved) * 100, 1)
+            : null;
+
+        $avgResolutionMinutes = $totalResolved > 0
+            ? $resolvedTickets->avg(
+                fn ($t) => $t->created_at->diffInMinutes($t->resolved_at)
+            )
+            : 0;
+
+        $avgHours = intdiv((int) $avgResolutionMinutes, 60);
+        $avgMinutes = (int) $avgResolutionMinutes % 60;
+
+        // Monthly breakdown — 12 bulan terakhir
+        $months = [];
+        $cursor = now()->startOfMonth()->subMonths(11);
+        $endCursor = now()->endOfMonth();
+
+        while ($cursor->lte($endCursor)) {
+            $key = $cursor->format('Y-m');
+            $months[$key] = [
+                'month' => $key,
+                'label' => $cursor->translatedFormat('M Y'),
+                'created_count' => 0,
+                'resolved_count' => 0,
+            ];
+            $cursor->addMonth();
+        }
+
+        foreach ($allTickets as $ticket) {
+            $key = $ticket->created_at->format('Y-m');
+            if (isset($months[$key])) {
+                $months[$key]['created_count']++;
+            }
+        }
+
+        foreach ($resolvedTickets as $ticket) {
+            $key = $ticket->resolved_at->format('Y-m');
+            if (isset($months[$key])) {
+                $months[$key]['resolved_count']++;
+            }
+        }
+
+        $firstTicket = $allTickets->sortBy('created_at')->first();
+
+        return Inertia::render('Reports/Overview', [
+            'monthly' => array_values($months),
+            'summary' => [
+                'total_created' => $totalCreated,
+                'total_resolved' => $totalResolved,
+                'total_sla_met' => $slaMet,
+                'total_sla_breach' => $slaBreach,
+                'sla_compliance_rate' => $slaComplianceRate,
+                'avg_resolution_text' => "{$avgHours}h {$avgMinutes}m",
+            ],
+            'status_summary' => $statusSummary,
+            'priority_summary' => $prioritySummary,
+            'first_ticket_date' => $firstTicket
+                ? $firstTicket->created_at->translatedFormat('d M Y')
+                : null,
+        ]);
+    }
+
+    private function calculateResolution(Ticket $ticket)
+    {
+        if (!$ticket->resolved_at) {
+            return null;
+        }
+
+        $created = $ticket->created_at;
+        $resolved = $ticket->resolved_at;
+
+        $diffMinutes = $created->diffInMinutes($resolved);
+
+        $hours = intdiv($diffMinutes, 60);
+        $minutes = $diffMinutes % 60;
+
+        $slaHours = match ($ticket->priority) {
+            'low' => 72,
+            'medium' => 24,
+            'high' => 8,
+            'urgent' => 4,
+            default => 24,
+        };
+
+        return [
+            'hours' => $hours,
+            'minutes' => $minutes,
+            'text' => "{$hours} hour" . ($hours != 1 ? "s" : "") .
+                " {$minutes} minute" . ($minutes != 1 ? "s" : ""),
+            'sla_hours' => $slaHours,
+            'within_sla' => $diffMinutes <= ($slaHours * 60),
+        ];
     }
 
     public function create()
@@ -91,7 +411,7 @@ class TicketController extends Controller
         // ===============================
         // Hitung Resolution Time & SLA
         // ===============================
-        $resolution = null;
+        $resolution = $this->calculateResolution($ticket);
 
         if ($ticket->resolved_at) {
 

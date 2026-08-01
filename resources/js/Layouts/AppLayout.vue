@@ -16,6 +16,9 @@ import {
     X,
     ChevronDown,
     ChevronUp,
+    BarChart3,
+    CalendarRange,
+    Globe,
 } from 'lucide-vue-next';
 
 const page = usePage();
@@ -23,6 +26,7 @@ const user = page.props.auth.user;
 
 const sidebarOpen = ref(false);
 const logsOpen = ref(route().current('logs.*'));
+const reportsOpen = ref(route().current('reports.*'));
 const showLogoutModal = ref(false);
 const showUserDropdown = ref(false);
 const isLoading = ref(false);
@@ -37,6 +41,7 @@ let ticking = false;
 
 const toggleSidebar = () => { sidebarOpen.value = !sidebarOpen.value; };
 const toggleLogs = () => { logsOpen.value = !logsOpen.value; };
+const toggleReports = () => { reportsOpen.value = !reportsOpen.value; };
 const toggleUserDropdown = () => { showUserDropdown.value = !showUserDropdown.value; };
 const closeUserDropdown = () => { showUserDropdown.value = false; };
 
@@ -89,6 +94,7 @@ const handleFinish = () => {
     }, 300);
 
     logsOpen.value = route().current('logs.*');
+    reportsOpen.value = route().current('reports.*');
 };
 
 onMounted(() => {
@@ -239,6 +245,49 @@ const subLinkClass = (name) => [
                         <Users class="h-4 w-4 shrink-0" />
                         Users
                     </Link>
+
+                    <!-- Report -->
+                    <div v-if="['admin', 'agent'].includes(user.role)">
+                        <button
+                            class="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150"
+                            :class="route().current('reports.*')
+                                ? 'bg-indigo-600 text-white shadow-sm'
+                                : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'"
+                            @click="toggleReports"
+                        >
+                            <BarChart3 class="h-4 w-4 shrink-0" />
+                            <span class="flex-1 text-left">Report</span>
+                            <ChevronUp v-if="reportsOpen" class="h-3.5 w-3.5" />
+                            <ChevronDown v-else class="h-3.5 w-3.5" />
+                        </button>
+
+                        <Transition
+                            enter-active-class="transition duration-200 ease-out"
+                            enter-from-class="opacity-0 -translate-y-1"
+                            leave-active-class="transition duration-150 ease-in"
+                            leave-to-class="opacity-0 -translate-y-1"
+                        >
+                            <div v-if="reportsOpen" class="mt-0.5 space-y-0.5 pl-4">
+                                <Link
+                                    :href="route('reports.index')"
+                                    :class="subLinkClass('reports.index')"
+                                    @click="sidebarOpen = false"
+                                >
+                                    <CalendarRange class="h-3.5 w-3.5 shrink-0" />
+                                    Daily
+                                </Link>
+
+                                <Link
+                                    :href="route('reports.overview')"
+                                    :class="subLinkClass('reports.overview')"
+                                    @click="sidebarOpen = false"
+                                >
+                                    <Globe class="h-3.5 w-3.5 shrink-0" />
+                                    Overview
+                                </Link>
+                            </div>
+                        </Transition>
+                    </div>
 
                     <!-- Logs -->
                     <div v-if="['admin', 'agent'].includes(user.role)">
