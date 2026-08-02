@@ -10,6 +10,7 @@ use App\Helpers\ActivityLogger;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class TicketController extends Controller
 {
@@ -130,14 +131,6 @@ class TicketController extends Controller
             }
         }
 
-        // SLA per priority (sama seperti calculateResolution)
-        $slaMap = [
-            'low' => 72,
-            'medium' => 24,
-            'high' => 8,
-            'urgent' => 4,
-        ];
-
         // Hitung ticket resolved per hari + status SLA
         foreach ($resolvedTickets as $ticket) {
             $key = $ticket->resolved_at->format('Y-m-d');
@@ -148,7 +141,7 @@ class TicketController extends Controller
             $days[$key]['resolved_count']++;
 
             $diffMinutes = $ticket->created_at->diffInMinutes($ticket->resolved_at);
-            $slaHours = $slaMap[$ticket->priority] ?? 24;
+            $slaHours = $this->getSlaHours($ticket->priority);
 
             if ($diffMinutes <= ($slaHours * 60)) {
                 $days[$key]['sla_met_count']++;
@@ -231,78 +224,87 @@ class TicketController extends Controller
             abort(403);
         }
 
-        $allTickets = Ticket::all(['id', 'created_at', 'resolved_at', 'status', 'priority']);
-        $resolvedTickets = $allTickets->whereNotNull('resolved_at');
+        $totalCreated = Ticket::count();
+        $totalResolved = Ticket::whereNotNull('resolved_at')->count();
 
-        $totalCreated = $allTickets->count();
-        $totalResolved = $resolvedTickets->count();
-
-        // Status summary
+        // Status summary — aggregate query, tidak load semua baris
         $statusSummary = [
             'open' => 0,
             'in_progress' => 0,
             'resolved' => 0,
             'closed' => 0,
         ];
-        foreach ($allTickets as $ticket) {
-            if (isset($statusSummary[$ticket->status])) {
-                $statusSummary[$ticket->status]++;
-            }
-        }
+        Ticket::select('status', DB::raw('count(*) as total'))
+            ->groupBy('status')
+            ->pluck('total', 'status')
+            ->each(function ($count, $status) use (&$statusSummary) {
+                if (isset($statusSummary[$status])) {
+                    $statusSummary[$status] = $count;
+                }
+            });
 
-        // Priority summary
+        // Priority summary — aggregate query
         $prioritySummary = [
             'low' => 0,
             'medium' => 0,
             'high' => 0,
             'urgent' => 0,
         ];
-        foreach ($allTickets as $ticket) {
-            if (isset($prioritySummary[$ticket->priority])) {
-                $prioritySummary[$ticket->priority]++;
-            }
-        }
+        Ticket::select('priority', DB::raw('count(*) as total'))
+            ->groupBy('priority')
+            ->pluck('total', 'priority')
+            ->each(function ($count, $priority) use (&$prioritySummary) {
+                if (isset($prioritySummary[$priority])) {
+                    $prioritySummary[$priority] = $count;
+                }
+            });
 
-        // SLA
-        $slaMap = [
-            'low' => 72,
-            'medium' => 24,
-            'high' => 8,
-            'urgent' => 4,
-        ];
-
+        // SLA & rata-rata resolusi — chunk hanya ticket resolved, memory-safe
         $slaMet = 0;
         $slaBreach = 0;
+        $totalResolutionMinutes = 0;
+        $resolutionSampleCount = 0;
 
-        foreach ($resolvedTickets as $ticket) {
-            $diffMinutes = $ticket->created_at->diffInMinutes($ticket->resolved_at);
-            $slaHours = $slaMap[$ticket->priority] ?? 24;
+        Ticket::whereNotNull('resolved_at')
+            ->select('id', 'created_at', 'resolved_at', 'priority')
+            ->chunk(500, function ($tickets) use (
+                &$slaMet,
+                &$slaBreach,
+                &$totalResolutionMinutes,
+                &$resolutionSampleCount
+            ) {
+                foreach ($tickets as $ticket) {
+                    $diffMinutes = $ticket->created_at->diffInMinutes($ticket->resolved_at);
+                    $slaHours = $this->getSlaHours($ticket->priority);
 
-            if ($diffMinutes <= ($slaHours * 60)) {
-                $slaMet++;
-            } else {
-                $slaBreach++;
-            }
-        }
+                    if ($diffMinutes <= ($slaHours * 60)) {
+                        $slaMet++;
+                    } else {
+                        $slaBreach++;
+                    }
+
+                    $totalResolutionMinutes += $diffMinutes;
+                    $resolutionSampleCount++;
+                }
+            });
 
         $slaComplianceRate = $totalResolved > 0
             ? round(($slaMet / $totalResolved) * 100, 1)
             : null;
 
-        $avgResolutionMinutes = $totalResolved > 0
-            ? $resolvedTickets->avg(
-                fn ($t) => $t->created_at->diffInMinutes($t->resolved_at)
-            )
+        $avgResolutionMinutes = $resolutionSampleCount > 0
+            ? $totalResolutionMinutes / $resolutionSampleCount
             : 0;
 
         $avgHours = intdiv((int) $avgResolutionMinutes, 60);
         $avgMinutes = (int) $avgResolutionMinutes % 60;
 
-        // Monthly breakdown — 12 bulan terakhir
-        $months = [];
-        $cursor = now()->startOfMonth()->subMonths(11);
+        // Monthly breakdown — 12 bulan terakhir, pakai aggregate query
+        $rangeStart = now()->startOfMonth()->subMonths(11);
         $endCursor = now()->endOfMonth();
 
+        $months = [];
+        $cursor = $rangeStart->copy();
         while ($cursor->lte($endCursor)) {
             $key = $cursor->format('Y-m');
             $months[$key] = [
@@ -314,21 +316,32 @@ class TicketController extends Controller
             $cursor->addMonth();
         }
 
-        foreach ($allTickets as $ticket) {
-            $key = $ticket->created_at->format('Y-m');
+        // Catatan: DATE_FORMAT adalah fungsi MySQL/MariaDB.
+        // Jika pakai database lain (SQLite/PostgreSQL), sesuaikan fungsinya.
+        $createdMonthly = Ticket::where('created_at', '>=', $rangeStart)
+            ->selectRaw("DATE_FORMAT(created_at, '%Y-%m') as ym, count(*) as total")
+            ->groupBy('ym')
+            ->pluck('total', 'ym');
+
+        foreach ($createdMonthly as $key => $count) {
             if (isset($months[$key])) {
-                $months[$key]['created_count']++;
+                $months[$key]['created_count'] = $count;
             }
         }
 
-        foreach ($resolvedTickets as $ticket) {
-            $key = $ticket->resolved_at->format('Y-m');
+        $resolvedMonthly = Ticket::whereNotNull('resolved_at')
+            ->where('resolved_at', '>=', $rangeStart)
+            ->selectRaw("DATE_FORMAT(resolved_at, '%Y-%m') as ym, count(*) as total")
+            ->groupBy('ym')
+            ->pluck('total', 'ym');
+
+        foreach ($resolvedMonthly as $key => $count) {
             if (isset($months[$key])) {
-                $months[$key]['resolved_count']++;
+                $months[$key]['resolved_count'] = $count;
             }
         }
 
-        $firstTicket = $allTickets->sortBy('created_at')->first();
+        $firstTicketDate = Ticket::min('created_at');
 
         return Inertia::render('Reports/Overview', [
             'monthly' => array_values($months),
@@ -342,8 +355,8 @@ class TicketController extends Controller
             ],
             'status_summary' => $statusSummary,
             'priority_summary' => $prioritySummary,
-            'first_ticket_date' => $firstTicket
-                ? $firstTicket->created_at->translatedFormat('d M Y')
+            'first_ticket_date' => $firstTicketDate
+                ? Carbon::parse($firstTicketDate)->translatedFormat('d M Y')
                 : null,
         ]);
     }
@@ -362,13 +375,7 @@ class TicketController extends Controller
         $hours = intdiv($diffMinutes, 60);
         $minutes = $diffMinutes % 60;
 
-        $slaHours = match ($ticket->priority) {
-            'low' => 72,
-            'medium' => 24,
-            'high' => 8,
-            'urgent' => 4,
-            default => 24,
-        };
+        $slaHours = $this->getSlaHours($ticket->priority);
 
         return [
             'hours' => $hours,
@@ -378,6 +385,17 @@ class TicketController extends Controller
             'sla_hours' => $slaHours,
             'within_sla' => $diffMinutes <= ($slaHours * 60),
         ];
+    }
+
+    private function getSlaHours(string $priority): int
+    {
+        return match ($priority) {
+            'low' => 72,
+            'medium' => 24,
+            'high' => 8,
+            'urgent' => 4,
+            default => 24,
+        };
     }
 
     public function create()

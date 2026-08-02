@@ -177,24 +177,45 @@ const maxPriorityValue = computed(() =>
 
             <!-- Status & Priority Breakdown -->
             <div class="grid gap-4 lg:grid-cols-2">
-                <div class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-                    <h2 class="mb-4 text-sm font-semibold text-gray-700">Breakdown by Status</h2>
-                    <div class="space-y-3">
-                        <div v-for="(count, key) in status_summary" :key="key">
-                            <div class="mb-1 flex items-center justify-between text-xs">
-                                <span class="font-medium text-gray-600">{{ statusConfig[key]?.label ?? key }}</span>
-                                <span class="text-gray-400">{{ count }}</span>
-                            </div>
-                            <div class="h-2 w-full overflow-hidden rounded-full bg-gray-100">
-                                <div
-                                    class="h-full rounded-full transition-all"
-                                    :class="statusConfig[key]?.color ?? 'bg-gray-400'"
-                                    :style="{ width: `${(count / maxStatusValue) * 100}%` }"
-                                ></div>
-                            </div>
+            <div class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+                <h2 class="mb-4 text-sm font-semibold text-gray-700">Breakdown by Status</h2>
+                <div class="space-y-3">
+                    <div v-for="(count, key) in status_summary" :key="key">
+                        <div class="mb-1 flex items-center justify-between text-xs">
+                            <span class="font-medium text-gray-600">{{ statusConfig[key]?.label ?? key }}</span>
+                            <span class="text-gray-400">{{ count }}</span>
+                        </div>
+                        <div class="h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                            <div
+                                class="h-full rounded-full transition-all"
+                                :class="statusConfig[key]?.color ?? 'bg-gray-400'"
+                                :style="{ width: `${(count / maxStatusValue) * 100}%` }"
+                            ></div>
                         </div>
                     </div>
                 </div>
+                <p class="mt-4 text-xs text-gray-400">All-time data, across every ticket ever created.</p>
+            </div>
+
+            <div class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+                <h2 class="mb-4 text-sm font-semibold text-gray-700">Breakdown by Priority</h2>
+                <div class="space-y-3">
+                    <div v-for="(count, key) in priority_summary" :key="key">
+                        <div class="mb-1 flex items-center justify-between text-xs">
+                            <span class="font-medium capitalize text-gray-600">{{ priorityConfig[key]?.label ?? key }}</span>
+                            <span class="text-gray-400">{{ count }}</span>
+                        </div>
+                        <div class="h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                            <div
+                                class="h-full rounded-full transition-all"
+                                :class="priorityConfig[key]?.color ?? 'bg-gray-400'"
+                                :style="{ width: `${(count / maxPriorityValue) * 100}%` }"
+                            ></div>
+                        </div>
+                    </div>
+                </div>
+                <p class="mt-4 text-xs text-gray-400">All-time data, across every ticket ever created.</p>
+            </div>
 
                 <div class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
                     <h2 class="mb-4 text-sm font-semibold text-gray-700">Breakdown by Priority</h2>
