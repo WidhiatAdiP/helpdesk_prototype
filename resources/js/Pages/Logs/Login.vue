@@ -55,6 +55,23 @@ const roleStyles = {
 
 const roleStyle = (role) => roleStyles[role] ?? roleStyles.user;
 
+const monthNames = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+const formatDateTime = (value) => {
+    if (!value) return '-';
+
+    // Format masuk diasumsikan: "DD-MM-YYYY HH:mm:ss"
+    const match = value.match(/^(\d{2})-(\d{2})-(\d{4})\s(\d{2}):(\d{2}):(\d{2})$/);
+    if (!match) return value; // fallback kalau format tidak sesuai dugaan
+
+    const [, day, month, year, hours, minutes, seconds] = match;
+    const monthName = monthNames[parseInt(month, 10) - 1];
+
+    return `${day}-${monthName}-${year} ${hours}:${minutes}:${seconds}`;
+};
 </script>
 
 <template>
@@ -151,7 +168,7 @@ const roleStyle = (role) => roleStyles[role] ?? roleStyles.user;
                                         </span>
 
                                         <span class="text-xs text-gray-500">
-                                            {{ log.status_time }}
+                                            {{ formatDateTime(log.status_time) }}
                                         </span>
 
                                     </div>
